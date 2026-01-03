@@ -1,23 +1,21 @@
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
-import {
-  onAuthStateChanged,
-  signOut,
- type User
-} from 'firebase/auth';
+import { onAuthStateChanged, signOut,type User } from 'firebase/auth';
 import {
   collection,
   addDoc,
   updateDoc,
   onSnapshot,
   deleteDoc,
-  doc
+  doc,
+  setDoc
 } from 'firebase/firestore';
 import {
   Car, Fuel, Plus, Download, Trash2, Edit2, History, ShoppingBag,
-  Home, Wallet, Handshake, Clock, Banknote, Gauge, LogOut, Lock, MessageCircle, ChevronDown, Info
+  Home, Wallet, Handshake, Gauge, LogOut, Lock,
+  MessageCircle, ChevronDown, Info
 } from 'lucide-react';
 
-import type { MileageLog, ExpenseLog, LoanLog, Repayment, TabView, DashboardMode } from './components/types';
+import type{ MileageLog, ExpenseLog, LoanLog, TabView, DashboardMode } from './components/types';
 import { formatCurrency, formatDate } from './components/utils';
 import { ExpenseModal, MileageModal, LoanModal, RepaymentModal } from './components/Modals';
 import Auth from './components/Auth';
@@ -56,7 +54,8 @@ const Recharts = React.lazy(() => import('recharts').then(module => ({
               <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
               <XAxis type="number" hide />
               <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={60} />
-              <Tooltip formatter={(val: number) => formatCurrency(val)} cursor={{ fill: 'transparent' }} />
+              {/* FIX: Handled potentially undefined 'val' */}
+              <Tooltip formatter={(val: number | undefined) => formatCurrency(val || 0)} cursor={{ fill: 'transparent' }} />
               <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={30}>
                 {data.map((entry: any, index: number) => (
                   <Cell key={`cell-${index}`} fill={entry.fill} />
@@ -76,7 +75,7 @@ const LoadingSpinner = () => (
   </div>
 );
 
-// --- LOCKED SCREEN ---
+// --- LOCKED SCREEN COMPONENT ---
 const LockedScreen = ({ onLogout }: { onLogout: () => void }) => {
   const message = encodeURIComponent("Hello, I want to subscribe to Trade2cart Finance.\n\nPrices:\n- Monthly: ₹10\n- Yearly: ₹100\n\nPlease let me know the payment details.");
 
@@ -135,14 +134,16 @@ export default function App() {
   const [expenses, setExpenses] = useState<ExpenseLog[]>([]);
   const [loans, setLoans] = useState<LoanLog[]>([]);
 
+  // Pagination
   const [historyLimit, setHistoryLimit] = useState(20);
 
+  // UI State
   const [isFabOpen, setIsFabOpen] = useState(false);
   const [modalType, setModalType] = useState<'mileage' | 'expense' | 'loan' | 'repayment' | null>(null);
   const [editItem, setEditItem] = useState<any>(null);
   const [selectedLoan, setSelectedLoan] = useState<LoanLog | null>(null);
 
-  // --- Auth & Access ---
+  // --- Auth Listener ---
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -151,19 +152,31 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // --- Data & Subscription Sync ---
   useEffect(() => {
     if (!user) {
-      setMileageLogs([]); setExpenses([]); setLoans([]);
+      setMileageLogs([]);
+      setExpenses([]);
+      setLoans([]);
       return;
     }
 
-    // Subscription Check
+    // 1. Subscription Logic
     const unsubSub = onSnapshot(doc(db, 'artifacts', appId, 'users', user.uid), (docSnap) => {
       const data = docSnap.data();
       const now = Date.now();
-      const createdAt = data?.createdAt || now;
+
+      let createdAt = now;
+      if (data?.createdAt) {
+        createdAt = typeof data.createdAt.toMillis === 'function' ? data.createdAt.toMillis() : data.createdAt;
+      }
+
+      let subDate = 0;
+      if (data?.subscriptionDate) {
+        subDate = typeof data.subscriptionDate.toMillis === 'function' ? data.subscriptionDate.toMillis() : data.subscriptionDate;
+      }
+
       const subType = data?.subscription || 'free';
-      const subDate = data?.subscriptionDate || 0;
 
       let allowed = false;
       if (subType === 'free') {
@@ -185,6 +198,7 @@ export default function App() {
       setLoading(false);
     });
 
+    // 2. Data Listeners
     const unsubMileage = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'mileage_logs'), (snap) => {
       setMileageLogs(snap.docs.map(d => ({ id: d.id, type: 'mileage', ...d.data() } as MileageLog)).sort((a, b) => b.odometer - a.odometer));
     });
@@ -213,9 +227,11 @@ export default function App() {
       const reading = parseFloat((form.elements.namedItem('reading') as HTMLInputElement).value);
       const date = (form.elements.namedItem('date') as HTMLInputElement).value;
       const fuelStatus = (form.elements.namedItem('fuelStatus') as HTMLInputElement).value;
-      if (editItem) await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'mileage_logs', editItem.id), { odometer: reading, date, fuelStatus });
-      // NOTE: We just save 0 dist for first log, Stats memo handles calculation now
-      else await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'mileage_logs'), { date, odometer: reading, distance: 0, fuelStatus, timestamp: Date.now() });
+      if (editItem) {
+        await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'mileage_logs', editItem.id), { odometer: reading, date, fuelStatus });
+      } else {
+        await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'mileage_logs'), { date, odometer: reading, distance: 0, fuelStatus, timestamp: Date.now() });
+      }
     } else if (type === 'expense') {
       const amount = parseFloat((form.elements.namedItem('amount') as HTMLInputElement).value);
       const category = (form.elements.namedItem('category') as HTMLInputElement).value;
@@ -231,14 +247,13 @@ export default function App() {
         fuelVolume: fuelVolumeEl?.value ? parseFloat(fuelVolumeEl.value) : null,
       };
 
-      if (editItem) await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'expenses', editItem.id), data);
-      else {
+      if (editItem) {
+        await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'expenses', editItem.id), data);
+      } else {
         await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses'), data);
-        // Auto add mileage
         if (category === 'Fuel' && linkedOdometerEl?.value) {
-          const reading = parseFloat(linkedOdometerEl.value);
           await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'mileage_logs'), {
-            date, odometer: reading, distance: 0, fuelStatus: 'Main', timestamp: Date.now()
+            date, odometer: parseFloat(linkedOdometerEl.value), distance: 0, fuelStatus: 'Main', timestamp: Date.now()
           });
         }
       }
@@ -253,12 +268,22 @@ export default function App() {
         note: (form.elements.namedItem('note') as HTMLInputElement).value,
         repayments: editItem?.repayments || []
       };
-      if (editItem) await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'loans', editItem.id), data);
-      else await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'loans'), { ...data, timestamp: Date.now() });
+      if (editItem) {
+        await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'loans', editItem.id), data);
+      } else {
+        await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'loans'), { ...data, timestamp: Date.now() });
+      }
     } else if (type === 'repayment' && selectedLoan) {
       const amount = parseFloat((form.elements.namedItem('amount') as HTMLInputElement).value);
-      const rep = { id: crypto.randomUUID(), amount, date: (form.elements.namedItem('date') as HTMLInputElement).value, note: (form.elements.namedItem('note') as HTMLInputElement).value };
-      await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'loans', selectedLoan.id), { repayments: [...selectedLoan.repayments, rep] });
+      const rep = {
+        id: crypto.randomUUID(),
+        amount,
+        date: (form.elements.namedItem('date') as HTMLInputElement).value,
+        note: (form.elements.namedItem('note') as HTMLInputElement).value
+      };
+      await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'loans', selectedLoan.id), {
+        repayments: [...selectedLoan.repayments, rep]
+      });
     }
     setModalType(null); setEditItem(null); setSelectedLoan(null); setIsFabOpen(false);
   };
@@ -277,19 +302,16 @@ export default function App() {
     link.click();
   };
 
-  // --- STATS CALCULATION (FIXED) ---
+  // --- STATS ---
   const stats = useMemo(() => {
-    // 1. Calculate Distance Correctly (Max - Min)
-    // This fixes the issue where first logs or bad saves cause "0 km" error
     const sortedLogs = [...mileageLogs].sort((a, b) => b.odometer - a.odometer);
     const currentOdometer = sortedLogs.length > 0 ? sortedLogs[0].odometer : 0;
     const initialOdometer = sortedLogs.length > 0 ? sortedLogs[sortedLogs.length - 1].odometer : 0;
-    const totalDistance = currentOdometer - initialOdometer; // Real distance driven since start
+    const totalDistance = currentOdometer - initialOdometer;
 
     const vehicleExpenses = expenses.filter(e => ['Fuel', 'Maintenance', 'Service', 'Insurance', 'Toll'].includes(e.category)).reduce((acc, log) => acc + log.amount, 0);
     const totalFuelVolume = expenses.filter(e => e.category === 'Fuel' && e.fuelVolume).reduce((acc, log) => acc + (log.fuelVolume || 0), 0);
 
-    // Only calculate rates if we have actually driven distance
     const costPerKm = totalDistance > 0 ? (vehicleExpenses / totalDistance).toFixed(2) : '---';
     const averageMileage = totalFuelVolume > 0 && totalDistance > 0 ? (totalDistance / totalFuelVolume).toFixed(1) : '---';
 
@@ -304,20 +326,18 @@ export default function App() {
 
     return {
       currentOdometer, totalDistance, vehicleExpenses, costPerKm, averageMileage, monthlySpend, owedByMe, owedToMe, netBalance: owedToMe - owedByMe,
-      // Flag to show helpful UI if only 1 log exists
       needsMoreData: mileageLogs.length === 1
     };
   }, [mileageLogs, expenses, loans]);
 
-  // --- History ---
+  // --- HISTORY ---
   const combinedHistory = useMemo(() => {
     return [...expenses, ...mileageLogs, ...loans]
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || b.timestamp - a.timestamp);
   }, [expenses, mileageLogs, loans]);
 
   const visibleHistory = useMemo(() => {
-    const sliced = combinedHistory.slice(0, historyLimit);
-    return sliced.reduce((groups, item) => {
+    return combinedHistory.slice(0, historyLimit).reduce((groups, item) => {
       const date = formatDate(item.date);
       if (!groups[date]) groups[date] = [];
       groups[date].push(item);
@@ -345,12 +365,15 @@ export default function App() {
             </div>
             {daysLeft > 0 && <span className="ml-2 text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">{daysLeft} days trial</span>}
           </div>
-          <button onClick={() => signOut(auth)} className="text-slate-400 hover:text-red-500 p-2 bg-slate-50 rounded-full transition-colors"><LogOut className="w-5 h-5" /></button>
+          <button onClick={() => signOut(auth)} className="text-slate-400 hover:text-red-500 p-2 bg-slate-50 rounded-full transition-colors">
+            <LogOut className="w-5 h-5" />
+          </button>
         </div>
       </header>
 
       <main className="max-w-md mx-auto px-4 pt-4">
 
+        {/* DASHBOARD */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6 animate-in fade-in">
             <div className="bg-slate-100 p-1 rounded-xl flex gap-1">
@@ -407,13 +430,12 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Helpful Message for New Users */}
                 {stats.needsMoreData && (
                   <div className="bg-orange-50 border border-orange-100 p-4 rounded-xl flex gap-3 animate-in fade-in">
                     <div className="bg-orange-100 p-2 h-fit rounded-full text-orange-600"><Info className="w-4 h-4" /></div>
                     <div>
                       <p className="font-bold text-sm text-orange-800">Add One More Reading!</p>
-                      <p className="text-xs text-orange-600 mt-1">To calculate "Total Driven" and "Mileage", we need at least two odometer entries (Start and End).</p>
+                      <p className="text-xs text-orange-600 mt-1">To calculate "Total Driven", add start & end logs.</p>
                     </div>
                   </div>
                 )}
@@ -436,6 +458,7 @@ export default function App() {
           </div>
         )}
 
+        {/* HISTORY */}
         {activeTab === 'history' && (
           <div className="space-y-4 animate-in fade-in">
             <div className="flex justify-between items-center bg-slate-100 p-2 rounded-xl">
@@ -466,7 +489,6 @@ export default function App() {
                           </div>
                         );
                       }
-                      // Add other items logic if needed
                       return null;
                     })}
                   </div>
@@ -481,6 +503,7 @@ export default function App() {
           </div>
         )}
 
+        {/* ANALYTICS */}
         {activeTab === 'analytics' && (
           <div className="space-y-6 animate-in fade-in">
             <Suspense fallback={<div className="h-72 bg-slate-100 rounded-2xl animate-pulse"></div>}>
@@ -490,7 +513,7 @@ export default function App() {
         )}
       </main>
 
-      {/* Floating Action Button & Nav */}
+      {/* FAB */}
       <div className="fixed bottom-24 right-4 z-30 flex flex-col items-end gap-3 pointer-events-none">
         {isFabOpen && (
           <div className="pointer-events-auto flex flex-col items-end gap-3 animate-in slide-in-from-bottom-10 fade-in duration-200">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Fuel, X, Zap, Droplet, ArrowDownLeft, ArrowUpRight, Banknote } from 'lucide-react';
+import { Fuel, X, Zap, Droplet, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import type { ExpenseLog, MileageLog, LoanLog } from './types';
 
 interface BaseModalProps {
@@ -13,21 +13,16 @@ interface ExpenseModalProps extends BaseModalProps {
 }
 
 export const ExpenseModal: React.FC<ExpenseModalProps> = ({ onClose, onSave, editItem, currentOdometer }) => {
-    // Default to Fuel if adding from "Vehicle Mode" logic could be added, but standard is fine
     const [cat, setCat] = useState(editItem?.category || 'Groceries');
     const [price, setPrice] = useState(editItem?.fuelPrice?.toString() || '');
     const [vol, setVol] = useState(editItem?.fuelVolume?.toString() || '');
     const [amt, setAmt] = useState(editItem?.amount?.toString() || '');
 
-    // Auto-calculate Volume when Price or Amount changes
     useEffect(() => {
         if (cat === 'Fuel' && price && amt) {
             const p = parseFloat(price);
             const a = parseFloat(amt);
-            if (p > 0) {
-                // Only update vol if it wasn't manually typed recently (simple check)
-                setVol((a / p).toFixed(2));
-            }
+            if (p > 0) setVol((a / p).toFixed(2));
         }
     }, [price, amt, cat]);
 
@@ -85,15 +80,9 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({ onClose, onSave, edi
                                     <div>
                                         <label className="text-xs text-blue-600 font-bold block mb-1">Current Odometer (Optional)</label>
                                         <div className="flex items-center gap-2">
-                                            <input
-                                                name="linkedOdometer"
-                                                type="number"
-                                                placeholder={currentOdometer.toString()}
-                                                className="w-full p-2 rounded-lg border-blue-200 outline-none font-bold text-slate-700"
-                                            />
+                                            <input name="linkedOdometer" type="number" placeholder={currentOdometer.toString()} className="w-full p-2 rounded-lg border-blue-200 outline-none font-bold text-slate-700" />
                                             <span className="text-xs text-blue-400 font-medium">km</span>
                                         </div>
-                                        <p className="text-[10px] text-blue-400 mt-1">Enter to auto-update mileage log</p>
                                     </div>
                                 )}
 
@@ -104,7 +93,6 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({ onClose, onSave, edi
                                     </div>
                                     <div>
                                         <label className="text-xs text-blue-600 font-bold block mb-1">Liters</label>
-                                        {/* Removed readOnly so you can fix it manually */}
                                         <input name="fuelVolume" type="number" step="0.01" placeholder="Liters" value={vol} onChange={e => setVol(e.target.value)} className="w-full p-2 rounded-lg border-blue-200 bg-white outline-none font-bold" />
                                     </div>
                                 </div>
@@ -173,44 +161,23 @@ export const LoanModal: React.FC<LoanModalProps> = ({ onClose, onSave, editItem 
                 <button onClick={onClose} type="button" className="bg-slate-100 p-2 rounded-full"><X className="w-5 h-5 text-slate-500" /></button>
             </div>
             <form onSubmit={onSave} className="space-y-4">
-
                 <div className="grid grid-cols-2 gap-3">
                     <label className="cursor-pointer">
                         <input type="radio" name="loanType" value="taken" defaultChecked={!editItem || editItem?.loanType === 'taken'} className="peer sr-only" />
-                        <div className="p-3 rounded-xl border border-slate-200 text-slate-500 peer-checked:bg-red-500 peer-checked:text-white peer-checked:border-red-500 transition-all flex flex-col items-center gap-1">
-                            <ArrowDownLeft className="w-5 h-5" />
-                            <span className="text-xs font-bold">I Borrowed</span>
-                        </div>
+                        <div className="p-3 rounded-xl border border-slate-200 text-slate-500 peer-checked:bg-red-500 peer-checked:text-white peer-checked:border-red-500 transition-all flex flex-col items-center gap-1"><ArrowDownLeft className="w-5 h-5" /><span className="text-xs font-bold">I Borrowed</span></div>
                     </label>
                     <label className="cursor-pointer">
                         <input type="radio" name="loanType" value="given" defaultChecked={editItem?.loanType === 'given'} className="peer sr-only" />
-                        <div className="p-3 rounded-xl border border-slate-200 text-slate-500 peer-checked:bg-green-500 peer-checked:text-white peer-checked:border-green-500 transition-all flex flex-col items-center gap-1">
-                            <ArrowUpRight className="w-5 h-5" />
-                            <span className="text-xs font-bold">I Lent</span>
-                        </div>
+                        <div className="p-3 rounded-xl border border-slate-200 text-slate-500 peer-checked:bg-green-500 peer-checked:text-white peer-checked:border-green-500 transition-all flex flex-col items-center gap-1"><ArrowUpRight className="w-5 h-5" /><span className="text-xs font-bold">I Lent</span></div>
                     </label>
                 </div>
-
-                <div>
-                    <label className="text-sm font-medium text-slate-600">Person Name</label>
-                    <input name="person" type="text" required placeholder="e.g. Rahul, Shopkeeper" defaultValue={editItem?.person} className="w-full p-3 mt-1 bg-slate-50 rounded-xl border border-slate-200 outline-none" />
-                </div>
-
-                <div>
-                    <label className="text-sm font-medium text-slate-600">Total Amount</label>
-                    <div className="relative mt-1">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
-                        <input name="amount" type="number" required placeholder="0" defaultValue={editItem?.amount} className="w-full p-3 pl-8 bg-slate-50 rounded-xl border border-slate-200 outline-none font-bold text-lg" />
-                    </div>
-                </div>
-
+                <div><label className="text-sm font-medium text-slate-600">Person Name</label><input name="person" type="text" required placeholder="e.g. Rahul" defaultValue={editItem?.person} className="w-full p-3 mt-1 bg-slate-50 rounded-xl border border-slate-200 outline-none" /></div>
+                <div><label className="text-sm font-medium text-slate-600">Total Amount</label><input name="amount" type="number" required placeholder="0" defaultValue={editItem?.amount} className="w-full p-3 mt-1 bg-slate-50 rounded-xl border border-slate-200 outline-none font-bold text-lg" /></div>
                 <div className="grid grid-cols-2 gap-3">
                     <div><label className="text-sm font-medium text-slate-600">Date Taken</label><input name="date" type="date" required defaultValue={editItem?.date || new Date().toISOString().split('T')[0]} className="w-full p-3 mt-1 bg-slate-50 rounded-xl border border-slate-200 outline-none" /></div>
                     <div><label className="text-sm font-medium text-slate-600 text-red-500">Repay Due Date</label><input name="dueDate" type="date" required defaultValue={editItem?.dueDate} className="w-full p-3 mt-1 bg-red-50 rounded-xl border border-red-100 outline-none text-red-600 font-medium" /></div>
                 </div>
-
                 <div><label className="text-sm font-medium text-slate-600">Note</label><input name="note" placeholder="Optional details..." defaultValue={editItem?.note} className="w-full p-3 mt-1 bg-slate-50 rounded-xl border border-slate-200 outline-none" /></div>
-
                 <button type="submit" className="w-full bg-slate-800 text-white font-bold py-3.5 rounded-xl hover:bg-slate-900 shadow-lg shadow-slate-200 mt-4">Save Record</button>
             </form>
         </div>
@@ -225,43 +192,21 @@ export const RepaymentModal: React.FC<RepaymentModalProps> = ({ onClose, onSave,
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in">
         <div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl animate-in slide-in-from-bottom-8">
             <div className="flex justify-between items-center mb-6">
-                <div>
-                    <h3 className="text-lg font-bold text-slate-800">Add Repayment</h3>
-                    <p className="text-xs text-slate-400">for {selectedLoan?.person}</p>
-                </div>
+                <div><h3 className="text-lg font-bold text-slate-800">Add Repayment</h3><p className="text-xs text-slate-400">for {selectedLoan?.person}</p></div>
                 <button onClick={onClose} type="button" className="bg-slate-100 p-2 rounded-full"><X className="w-5 h-5 text-slate-500" /></button>
             </div>
             <form onSubmit={onSave} className="space-y-4">
-
                 <div className="bg-slate-50 p-4 rounded-xl mb-4 border border-slate-100">
-                    <div className="flex justify-between text-sm mb-1">
-                        <span className="text-slate-500">Total Loan</span>
-                        <span className="font-bold">₹{selectedLoan?.amount}</span>
-                    </div>
-                    <div className="flex justify-between text-sm mb-1">
-                        <span className="text-slate-500">Paid So Far</span>
-                        <span className="font-bold text-green-600">₹{(selectedLoan?.repayments || []).reduce((s, r) => s + r.amount, 0)}</span>
-                    </div>
+                    <div className="flex justify-between text-sm mb-1"><span className="text-slate-500">Total Loan</span><span className="font-bold">₹{selectedLoan?.amount}</span></div>
+                    <div className="flex justify-between text-sm mb-1"><span className="text-slate-500">Paid So Far</span><span className="font-bold text-green-600">₹{(selectedLoan?.repayments || []).reduce((s, r) => s + r.amount, 0)}</span></div>
                     <div className="border-t border-slate-200 my-2"></div>
-                    <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">Remaining</span>
-                        <span className="font-bold text-red-500">₹{(selectedLoan?.amount || 0) - ((selectedLoan?.repayments || []).reduce((s, r) => s + r.amount, 0))}</span>
-                    </div>
+                    <div className="flex justify-between text-sm"><span className="text-slate-500">Remaining</span><span className="font-bold text-red-500">₹{(selectedLoan?.amount || 0) - ((selectedLoan?.repayments || []).reduce((s, r) => s + r.amount, 0))}</span></div>
                 </div>
-
-                <div>
-                    <label className="text-sm font-medium text-slate-600">Repayment Amount</label>
-                    <div className="relative mt-1">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
-                        <input name="amount" type="number" step="0.01" required placeholder="0" max={(selectedLoan?.amount || 0) - ((selectedLoan?.repayments || []).reduce((s, r) => s + r.amount, 0))} className="w-full p-3 pl-8 bg-slate-50 rounded-xl border border-slate-200 outline-none font-bold text-lg" />
-                    </div>
-                </div>
-
+                <div><label className="text-sm font-medium text-slate-600">Repayment Amount</label><input name="amount" type="number" step="0.01" required placeholder="0" max={(selectedLoan?.amount || 0) - ((selectedLoan?.repayments || []).reduce((s, r) => s + r.amount, 0))} className="w-full p-3 mt-1 bg-slate-50 rounded-xl border border-slate-200 outline-none font-bold text-lg" /></div>
                 <div className="grid grid-cols-2 gap-3">
                     <div><label className="text-sm font-medium text-slate-600">Date Paid</label><input name="date" type="date" required defaultValue={new Date().toISOString().split('T')[0]} className="w-full p-3 mt-1 bg-slate-50 rounded-xl border border-slate-200 outline-none" /></div>
                     <div><label className="text-sm font-medium text-slate-600">Note</label><input name="note" placeholder="UPI / Cash..." className="w-full p-3 mt-1 bg-slate-50 rounded-xl border border-slate-200 outline-none" /></div>
                 </div>
-
                 <button type="submit" className="w-full bg-green-600 text-white font-bold py-3.5 rounded-xl hover:bg-green-700 shadow-lg shadow-green-200 mt-4">Record Payment</button>
             </form>
         </div>

@@ -1,4 +1,3 @@
-// types.ts
 export interface MileageLog {
     id: string;
     type: 'mileage';
