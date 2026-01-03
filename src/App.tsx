@@ -1,27 +1,30 @@
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
-import { onAuthStateChanged, signOut,type User } from 'firebase/auth';
+import {
+  onAuthStateChanged,
+  signOut,
+  type User
+} from 'firebase/auth';
 import {
   collection,
   addDoc,
   updateDoc,
   onSnapshot,
   deleteDoc,
-  doc,
-  // setDoc
+  doc
 } from 'firebase/firestore';
 import {
   Car, Fuel, Plus, Download, Trash2, Edit2, History, ShoppingBag,
-  Home, Wallet, Handshake, Gauge, LogOut, Lock,
-  MessageCircle, ChevronDown, Info
+  Home, Wallet, Handshake, Gauge, LogOut, Lock, MessageCircle, ChevronDown, Info
 } from 'lucide-react';
 
-import type{ MileageLog, ExpenseLog, LoanLog, TabView, DashboardMode } from './components/types';
+// Removed unused 'Repayment' from imports
+import type { MileageLog, ExpenseLog, LoanLog, TabView, DashboardMode } from './components/types';
 import { formatCurrency, formatDate } from './components/utils';
 import { ExpenseModal, MileageModal, LoanModal, RepaymentModal } from './components/Modals';
 import Auth from './components/Auth';
 import { auth, db, appId } from './components/firebaseConfig';
 
-// --- LAZY LOAD CHARTS (Performance) ---
+// --- LAZY LOAD CHARTS ---
 const Recharts = React.lazy(() => import('recharts').then(module => ({
   default: ({ data, expenses }: { data: any[], expenses: any[] }) => {
     const { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } = module;
@@ -54,8 +57,8 @@ const Recharts = React.lazy(() => import('recharts').then(module => ({
               <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
               <XAxis type="number" hide />
               <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={60} />
-              {/* FIX: Handled potentially undefined 'val' */}
-              <Tooltip formatter={(val: number | undefined) => formatCurrency(val || 0)} cursor={{ fill: 'transparent' }} />
+              {/* Fixed Type Error: Handle undefined value */}
+              <Tooltip formatter={(value: number) => [formatCurrency(value), "Amount"]} cursor={{ fill: 'transparent' }} />
               <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={30}>
                 {data.map((entry: any, index: number) => (
                   <Cell key={`cell-${index}`} fill={entry.fill} />
@@ -168,6 +171,7 @@ export default function App() {
 
       let createdAt = now;
       if (data?.createdAt) {
+        // Handle Firestore Timestamp or Number
         createdAt = typeof data.createdAt.toMillis === 'function' ? data.createdAt.toMillis() : data.createdAt;
       }
 
@@ -358,7 +362,13 @@ export default function App() {
       <header className="bg-white sticky top-0 z-20 border-b border-slate-100 px-4 py-3 shadow-sm">
         <div className="max-w-md mx-auto flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <div className="bg-orange-100 p-2 rounded-xl text-orange-600"><Wallet className="w-5 h-5" /></div>
+            {/* <div className="bg-orange-100 p-2 rounded-xl text-orange-600"><Wallet className="w-5 h-5" /></div> */}
+            <img
+              src="../logo.PNG"
+              alt="Logo"
+              class="h-12 w-12 rounded-lg bg-white p-1 shadow-md object-contain"
+            />
+
             <div>
               <span className="font-bold text-lg text-slate-800 block leading-tight">Trade2cart</span>
               <span className="text-[10px] text-slate-400 font-bold tracking-wider">FINANCE</span>
@@ -489,7 +499,84 @@ export default function App() {
                           </div>
                         );
                       }
-                      return null;
+                      else if (item.type === 'loan') {
+                        const l = item as LoanLog;
+                        const totalPaid = (l.repayments || []).reduce((sum, r) => sum + r.amount, 0);
+                        const balance = l.amount - totalPaid;
+                        const progress = Math.min(100, (totalPaid / l.amount) * 100);
+                        const isPaid = balance <= 0;
+                        const isPartial = totalPaid > 0 && !isPaid;
+
+                        return (
+                          <div key={l.id} className={`p-4 border-b border-slate-50 last:border-0 flex flex-col gap-3 group ${isPaid ? 'opacity-60 bg-slate-50' : 'bg-white'}`}>
+                            <div className="flex justify-between">
+                              <div className="flex gap-3">
+                                <div className={`w-1 h-10 rounded-full ${l.loanType === 'taken' ? 'bg-red-500' : 'bg-green-500'}`}></div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <p className={`font-bold text-sm ${isPaid ? 'line-through text-slate-500' : 'text-slate-800'}`}>
+                                      {l.loanType === 'taken' ? 'Borrowed from' : 'Lent to'} {l.person}
+                                    </p>
+                                    {isPaid && <span className="text-[10px] bg-slate-200 px-1.5 rounded text-slate-500 font-bold">SETTLED</span>}
+                                    {isPartial && <span className="text-[10px] bg-orange-100 text-orange-600 px-1.5 rounded font-bold border border-orange-200">PARTIAL</span>}
+                                    {!isPaid && !isPartial && <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 rounded font-bold border border-blue-100">OPEN</span>}
+                                  </div>
+                                  <div className="flex items-center gap-1 text-xs text-slate-400 mt-0.5">
+                                    <Clock className="w-3 h-3" /> Due: {l.dueDate}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className={`font-bold ${l.loanType === 'taken' ? 'text-red-600' : 'text-green-600'} ${isPaid ? 'line-through opacity-50' : ''}`}>
+                                  {l.loanType === 'taken' ? '+' : '-'}{formatCurrency(l.amount)}
+                                </p>
+                                <p className="text-xs text-slate-400">Bal: {formatCurrency(balance)}</p>
+                              </div>
+                            </div>
+
+                            <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                              <div className={`h-full rounded-full transition-all duration-500 ${isPaid ? 'bg-green-400' : 'bg-blue-400'}`} style={{ width: `${progress}%` }}></div>
+                            </div>
+
+                            {!isPaid && (
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  onClick={() => { setSelectedLoan(l); setModalType('repayment') }}
+                                  className="flex items-center gap-1 text-xs font-bold bg-green-50 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-100 border border-green-100"
+                                >
+                                  <Banknote className="w-3 h-3" /> Pay / Record
+                                </button>
+                                <button onClick={() => { setEditItem(l); setModalType('loan'); }} className="p-1.5 bg-slate-50 rounded text-slate-400 hover:text-blue-500"><Edit2 className="w-3 h-3" /></button>
+                                <button onClick={() => deleteItem('loans', l.id)} className="p-1.5 bg-slate-50 rounded text-slate-400 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      }
+                      else {
+                        const m = item as MileageLog;
+                        return (
+                          <div key={m.id} className="p-4 border-b border-slate-50 last:border-0 flex justify-between group bg-slate-50/50">
+                            <div className="flex gap-3">
+                              <div className="w-1 h-10 rounded-full bg-slate-400"></div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <p className="font-bold text-sm text-slate-700">{m.odometer.toLocaleString()} km</p>
+                                  {m.fuelStatus === 'Reserve' && <span className="text-[10px] font-bold bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded border border-orange-200">RESERVE</span>}
+                                  {m.fuelStatus === 'Main' && <span className="text-[10px] font-bold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded border border-blue-200">MAIN</span>}
+                                </div>
+                                <p className="text-xs text-slate-400">Odometer Update</p>
+                              </div>
+                            </div>
+                            <div className="text-right flex items-center">
+                              <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={() => { setEditItem(m); setModalType('mileage'); }}><Edit2 className="w-3 h-3 text-blue-500" /></button>
+                                <button onClick={() => deleteItem('mileage_logs', m.id)}><Trash2 className="w-3 h-3 text-red-500" /></button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
                     })}
                   </div>
                 </div>
