@@ -27,7 +27,7 @@ import Auth from './components/Auth';
 import { auth, db, appId } from './components/firebaseConfig';
 
 // --- IMPORT IMAGE FROM ASSETS ---
-import logo from '/logo.PNG';
+// import logo from '/logo.PNG';
 
 // --- LAZY LOAD CHARTS ---
 const Recharts = React.lazy(() => import('recharts').then(module => ({
@@ -389,7 +389,7 @@ export default function App() {
         <div className="max-w-md mx-auto flex justify-between items-center">
           <div className="flex items-center gap-2">
             <img
-              src={logo}
+              src="/logo.PNG"
               alt="Logo"
               className="h-12 w-12 rounded-lg bg-white p-1 shadow-md object-contain"
             />
