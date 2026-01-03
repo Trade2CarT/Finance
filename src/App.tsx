@@ -366,7 +366,7 @@ export default function App() {
             {/* Wallet icon commented out as per your code */}
             {/* <div className="bg-orange-100 p-2 rounded-xl text-orange-600"><Wallet className="w-5 h-5" /></div> */}
             <img
-              src="../logo.PNG"
+              src="/logo.PNG"
               alt="Logo"
               className="h-12 w-12 rounded-lg bg-white p-1 shadow-md object-contain"
             />
