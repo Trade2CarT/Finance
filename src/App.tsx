@@ -12,7 +12,7 @@ import {
   deleteDoc,
   doc
 } from 'firebase/firestore';
-import img from "../logo.PNG";
+// import img from "../logo.PNG";
 import {
   Car, Fuel, Plus, Download, Trash2, Edit2, History, ShoppingBag,
   Home, Handshake, Gauge, LogOut, Lock, MessageCircle, ChevronDown, Info,
