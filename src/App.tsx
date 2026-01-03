@@ -10,22 +10,24 @@ import {
   updateDoc,
   onSnapshot,
   deleteDoc,
-  doc
+  doc,
+  setDoc // Required for saving settings
 } from 'firebase/firestore';
 import {
   Car, Fuel, Plus, Download, Trash2, Edit2, History, ShoppingBag,
   Home, Handshake, Gauge, LogOut, Lock, MessageCircle, ChevronDown, Info,
-  Clock, Banknote // <--- Fixed: Added missing imports
+  Clock, Banknote, Settings // Settings Icon
 } from 'lucide-react';
 
-import type { MileageLog, ExpenseLog, LoanLog, TabView, DashboardMode } from './components/types';
+// Make sure VehicleSettings is defined in your types.ts
+import type { MileageLog, ExpenseLog, LoanLog, TabView, DashboardMode, VehicleSettings } from './components/types';
 import { formatCurrency, formatDate } from './components/utils';
-import { ExpenseModal, MileageModal, LoanModal, RepaymentModal } from './components/Modals';
+import { ExpenseModal, MileageModal, LoanModal, RepaymentModal, SettingsModal } from './components/Modals';
 import Auth from './components/Auth';
 import { auth, db, appId } from './components/firebaseConfig';
 
 // --- IMPORT IMAGE FROM ASSETS ---
-// import logo from '/logo.PNG';
+import logo from '/logo.PNG';
 
 // --- LAZY LOAD CHARTS ---
 const Recharts = React.lazy(() => import('recharts').then(module => ({
@@ -60,7 +62,6 @@ const Recharts = React.lazy(() => import('recharts').then(module => ({
               <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
               <XAxis type="number" hide />
               <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={60} />
-              {/* Fixed Type Error */}
               <Tooltip formatter={(value: number | undefined) => [formatCurrency(value || 0), "Amount"]} cursor={{ fill: 'transparent' }} />
               <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={30}>
                 {data.map((entry: any, index: number) => (
@@ -128,23 +129,32 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Access State
   const [hasAccess, setHasAccess] = useState(false);
   const [daysLeft, setDaysLeft] = useState(0);
 
   const [activeTab, setActiveTab] = useState<TabView>('dashboard');
   const [dashMode, setDashMode] = useState<DashboardMode>('wallet');
 
+  // Data State
   const [mileageLogs, setMileageLogs] = useState<MileageLog[]>([]);
   const [expenses, setExpenses] = useState<ExpenseLog[]>([]);
   const [loans, setLoans] = useState<LoanLog[]>([]);
 
+  // NEW: Settings State
+  const [vehicleSettings, setVehicleSettings] = useState<VehicleSettings | null>(null);
+
+  // Pagination
   const [historyLimit, setHistoryLimit] = useState(20);
 
+  // UI State
   const [isFabOpen, setIsFabOpen] = useState(false);
-  const [modalType, setModalType] = useState<'mileage' | 'expense' | 'loan' | 'repayment' | null>(null);
+  // Added 'settings' to modal types
+  const [modalType, setModalType] = useState<'mileage' | 'expense' | 'loan' | 'repayment' | 'settings' | null>(null);
   const [editItem, setEditItem] = useState<any>(null);
   const [selectedLoan, setSelectedLoan] = useState<LoanLog | null>(null);
 
+  // --- Auth Listener ---
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -153,18 +163,27 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // --- Data & Subscription Sync ---
   useEffect(() => {
     if (!user) {
       setMileageLogs([]);
       setExpenses([]);
       setLoans([]);
+      setVehicleSettings(null);
       return;
     }
 
+    // 1. Subscription & Settings Logic
     const unsubSub = onSnapshot(doc(db, 'artifacts', appId, 'users', user.uid), (docSnap) => {
       const data = docSnap.data();
       const now = Date.now();
 
+      // --- LOAD SETTINGS FROM DB ---
+      if (data?.settings) {
+        setVehicleSettings(data.settings);
+      }
+
+      // --- CHECK SUBSCRIPTION ---
       let createdAt = now;
       if (data?.createdAt) {
         createdAt = typeof data.createdAt.toMillis === 'function' ? data.createdAt.toMillis() : data.createdAt;
@@ -197,6 +216,7 @@ export default function App() {
       setLoading(false);
     });
 
+    // 2. Data Listeners
     const unsubMileage = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'mileage_logs'), (snap) => {
       setMileageLogs(snap.docs.map(d => ({ id: d.id, type: 'mileage', ...d.data() } as MileageLog)).sort((a, b) => b.odometer - a.odometer));
     });
@@ -215,12 +235,25 @@ export default function App() {
     return () => { unsubSub(); unsubMileage(); unsubExpenses(); unsubLoans(); };
   }, [user]);
 
-  const handleSave = async (e: React.FormEvent, type: 'mileage' | 'expense' | 'loan' | 'repayment') => {
+  // --- Handlers ---
+  const handleSave = async (e: React.FormEvent, type: 'mileage' | 'expense' | 'loan' | 'repayment' | 'settings') => {
     e.preventDefault();
     if (!user) return;
     const form = e.target as HTMLFormElement;
 
-    if (type === 'mileage') {
+    // --- SAVE SETTINGS LOGIC ---
+    if (type === 'settings') {
+      const tankCapacity = parseFloat((form.elements.namedItem('tankCapacity') as HTMLInputElement).value);
+      const reserveCapacity = parseFloat((form.elements.namedItem('reserveCapacity') as HTMLInputElement).value);
+
+      // Save to Firebase User Document
+      await setDoc(doc(db, 'artifacts', appId, 'users', user.uid), {
+        settings: { tankCapacity, reserveCapacity }
+      }, { merge: true }); // 'merge' keeps subscription data safe
+    }
+    // ---------------------------
+
+    else if (type === 'mileage') {
       const reading = parseFloat((form.elements.namedItem('reading') as HTMLInputElement).value);
       const date = (form.elements.namedItem('date') as HTMLInputElement).value;
       const fuelStatus = (form.elements.namedItem('fuelStatus') as HTMLInputElement).value;
@@ -299,6 +332,7 @@ export default function App() {
     link.click();
   };
 
+  // --- STATS ---
   const stats = useMemo(() => {
     const sortedLogs = [...mileageLogs].sort((a, b) => b.odometer - a.odometer);
     const currentOdometer = sortedLogs.length > 0 ? sortedLogs[0].odometer : 0;
@@ -326,6 +360,7 @@ export default function App() {
     };
   }, [mileageLogs, expenses, loans]);
 
+  // --- HISTORY ---
   const combinedHistory = useMemo(() => {
     return [...expenses, ...mileageLogs, ...loans]
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || b.timestamp - a.timestamp);
@@ -353,23 +388,26 @@ export default function App() {
       <header className="bg-white sticky top-0 z-20 border-b border-slate-100 px-4 py-3 shadow-sm">
         <div className="max-w-md mx-auto flex justify-between items-center">
           <div className="flex items-center gap-2">
-
-            {/* FIXED LOGO IMPORT AND USAGE */}
             <img
-              src="/logo.PNG"
+              src={logo}
               alt="Logo"
               className="h-12 w-12 rounded-lg bg-white p-1 shadow-md object-contain"
             />
-
             <div>
               <span className="font-bold text-lg text-slate-800 block leading-tight">Trade2cart</span>
               <span className="text-[10px] text-slate-400 font-bold tracking-wider">FINANCE</span>
             </div>
             {daysLeft > 0 && <span className="ml-2 text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">{daysLeft} days trial</span>}
           </div>
-          <button onClick={() => signOut(auth)} className="text-slate-400 hover:text-red-500 p-2 bg-slate-50 rounded-full transition-colors">
-            <LogOut className="w-5 h-5" />
-          </button>
+          <div className="flex gap-2">
+            {/* SETTINGS BUTTON */}
+            <button onClick={() => setModalType('settings')} className="text-slate-400 hover:text-slate-600 p-2 bg-slate-50 rounded-full transition-colors">
+              <Settings className="w-5 h-5" />
+            </button>
+            <button onClick={() => signOut(auth)} className="text-slate-400 hover:text-red-500 p-2 bg-slate-50 rounded-full transition-colors">
+              <LogOut className="w-5 h-5" />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -390,11 +428,11 @@ export default function App() {
                   <h2 className="text-4xl font-bold">{formatCurrency(stats.monthlySpend)}</h2>
                   <div className="mt-6 pt-4 border-t border-slate-700/50 flex gap-3">
                     <div className="bg-white/5 flex-1 p-3 rounded-lg border border-white/10">
-                      <p className="text-[10px] text-red-300 uppercase mb-0.5">I Owe</p>
+                      <p className="text-[10px] text-red-300 uppercase mb-0.5">Need To PAY</p>
                       <p className="font-bold text-lg">{formatCurrency(stats.owedByMe)}</p>
                     </div>
                     <div className="bg-white/5 flex-1 p-3 rounded-lg border border-white/10">
-                      <p className="text-[10px] text-green-300 uppercase mb-0.5">Owed to Me</p>
+                      <p className="text-[10px] text-green-300 uppercase mb-0.5">Get Back</p>
                       <p className="font-bold text-lg">{formatCurrency(stats.owedToMe)}</p>
                     </div>
                   </div>
@@ -613,10 +651,12 @@ export default function App() {
         </div>
       </nav>
 
+      {/* MODALS */}
       {modalType === 'expense' && <ExpenseModal onClose={() => setModalType(null)} onSave={(e) => handleSave(e, 'expense')} editItem={editItem} currentOdometer={stats.currentOdometer} />}
       {modalType === 'mileage' && <MileageModal onClose={() => setModalType(null)} onSave={(e) => handleSave(e, 'mileage')} editItem={editItem} currentOdometer={stats.currentOdometer} />}
       {modalType === 'loan' && <LoanModal onClose={() => setModalType(null)} onSave={(e) => handleSave(e, 'loan')} editItem={editItem} />}
       {modalType === 'repayment' && <RepaymentModal onClose={() => setModalType(null)} onSave={(e) => handleSave(e, 'repayment')} selectedLoan={selectedLoan} />}
+      {modalType === 'settings' && <SettingsModal onClose={() => setModalType(null)} onSave={(e) => handleSave(e, 'settings')} settings={vehicleSettings} />}
     </div>
   );
 }

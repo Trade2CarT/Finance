@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Fuel, X, Zap, Droplet, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
-import type { ExpenseLog, MileageLog, LoanLog } from './types';
+import type { ExpenseLog, MileageLog, LoanLog, VehicleSettings } from './types'; // Import VehicleSettings
 
 interface BaseModalProps {
     onClose: () => void;
@@ -208,6 +208,43 @@ export const RepaymentModal: React.FC<RepaymentModalProps> = ({ onClose, onSave,
                     <div><label className="text-sm font-medium text-slate-600">Note</label><input name="note" placeholder="UPI / Cash..." className="w-full p-3 mt-1 bg-slate-50 rounded-xl border border-slate-200 outline-none" /></div>
                 </div>
                 <button type="submit" className="w-full bg-green-600 text-white font-bold py-3.5 rounded-xl hover:bg-green-700 shadow-lg shadow-green-200 mt-4">Record Payment</button>
+            </form>
+        </div>
+    </div>
+);
+
+// --- THIS IS THE NEW MODAL YOU ARE MISSING ---
+interface SettingsModalProps extends BaseModalProps {
+    settings: VehicleSettings | null;
+}
+
+export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onSave, settings }) => (
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in">
+        <div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-xl animate-in slide-in-from-bottom-8">
+            <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-bold text-slate-800">Vehicle Settings</h3>
+                <button onClick={onClose} type="button" className="bg-slate-100 p-2 rounded-full"><X className="w-5 h-5 text-slate-500" /></button>
+            </div>
+            <form onSubmit={onSave} className="space-y-4">
+                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 mb-2">
+                    <p className="text-xs text-blue-700 mb-2 font-semibold">Vehicle Details</p>
+                    <p className="text-xs text-blue-600">Enter your tank capacity to help us calculate fuel levels and range in the future.</p>
+                </div>
+                <div>
+                    <label className="text-sm font-medium text-slate-600">Total Tank Capacity (L)</label>
+                    <div className="flex items-center mt-1">
+                        <input name="tankCapacity" type="number" step="0.1" required defaultValue={settings?.tankCapacity} placeholder="e.g. 12" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 outline-none" />
+                        <span className="ml-2 font-bold text-slate-400">L</span>
+                    </div>
+                </div>
+                <div>
+                    <label className="text-sm font-medium text-slate-600">Reserve Capacity (L)</label>
+                    <div className="flex items-center mt-1">
+                        <input name="reserveCapacity" type="number" step="0.1" required defaultValue={settings?.reserveCapacity} placeholder="e.g. 2" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 outline-none" />
+                        <span className="ml-2 font-bold text-slate-400">L</span>
+                    </div>
+                </div>
+                <button type="submit" className="w-full bg-slate-800 text-white font-bold py-3.5 rounded-xl hover:bg-slate-900 shadow-lg shadow-slate-200 mt-4">Save Settings</button>
             </form>
         </div>
     </div>

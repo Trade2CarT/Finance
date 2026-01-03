@@ -40,5 +40,11 @@ export interface LoanLog {
     timestamp: number;
 }
 
+// --- THIS IS THE MISSING PART ---
+export interface VehicleSettings {
+    tankCapacity: number;
+    reserveCapacity: number;
+}
+
 export type TabView = 'dashboard' | 'history' | 'analytics';
 export type DashboardMode = 'wallet' | 'vehicle';
