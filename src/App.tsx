@@ -1,20 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { initializeApp } from 'firebase/app';
 import {
-  getAuth,
-  signInAnonymously,
-  signInWithCustomToken,
   onAuthStateChanged,
-  User
+  signOut,
+ type User
 } from 'firebase/auth';
 import {
-  getFirestore,
   collection,
   addDoc,
   updateDoc,
   onSnapshot,
   deleteDoc,
-  doc
+  doc,
+  setDoc
 } from 'firebase/firestore';
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis,
@@ -22,40 +19,54 @@ import {
 } from 'recharts';
 import {
   Car, Fuel, Plus, Download, Trash2, Edit2, History, ShoppingBag,
-  Home, Wallet, Handshake, Clock, Banknote, Gauge
+  Home, Wallet, Handshake, Clock, Banknote, Gauge, LogOut, Lock, MessageCircle
 } from 'lucide-react';
 
-// --- Imports from Split Files ---
-import { MileageLog, ExpenseLog, LoanLog, Repayment, TabView, DashboardMode } from './types';
-import { formatCurrency, formatDate } from './utils';
-import { ExpenseModal, MileageModal, LoanModal, RepaymentModal } from './Modals';
-// --- ADD THIS ---
-import { auth, db, appId } from './firebaseConfig';
-
-// // --- Firebase Config ---
-// // Ensure these variables are defined in your build environment
-// declare const __firebase_config: string;
-// declare const __app_id: string;
-// declare const __initial_auth_token: string | undefined;
-
-// const firebaseConfig = JSON.parse(__firebase_config);
-// const app = initializeApp(firebaseConfig);
-// const auth = getAuth(app);
-// const db = getFirestore(app);
-// const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+import type { MileageLog, ExpenseLog, LoanLog, Repayment, TabView, DashboardMode } from './components/types';
+import { formatCurrency, formatDate } from './components/utils';
+import { ExpenseModal, MileageModal, LoanModal, RepaymentModal } from './components/Modals';
+import Auth from './components/Auth';
+import { auth, db, appId } from './components/firebaseConfig';
 
 const COLORS = ['#F59E0B', '#10B981', '#3B82F6', '#EF4444', '#8B5CF6'];
 
-// --- Components ---
 const LoadingSpinner = () => (
   <div className="flex justify-center items-center h-screen bg-slate-50">
     <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-orange-600"></div>
   </div>
 );
 
+// --- LOCKED SCREEN COMPONENT ---
+const LockedScreen = ({ onLogout }: { onLogout: () => void }) => (
+  <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
+    <div className="bg-white p-8 rounded-3xl shadow-xl max-w-sm w-full border border-slate-100">
+      <div className="bg-red-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500">
+        <Lock className="w-8 h-8" />
+      </div>
+      <h2 className="text-2xl font-bold text-slate-800 mb-2">Subscription Required</h2>
+      <p className="text-slate-500 mb-6 text-sm">
+        This is a premium app. To get full access to all features, please subscribe.
+      </p>
+
+      <button
+        onClick={() => window.open('https://wa.me/918903166106', '_blank')}
+        className="w-full bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-green-200 transition-all active:scale-95 mb-4"
+      >
+        <MessageCircle className="w-5 h-5" />
+        Subscribe via WhatsApp
+      </button>
+
+      <button onClick={onLogout} className="text-slate-400 text-sm font-bold hover:text-slate-600">
+        Log Out
+      </button>
+    </div>
+  </div>
+);
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [subscription, setSubscription] = useState<'free' | 'subscribe'>('free'); // Default to free
   const [activeTab, setActiveTab] = useState<TabView>('dashboard');
   const [dashMode, setDashMode] = useState<DashboardMode>('wallet');
 
@@ -70,17 +81,8 @@ export default function App() {
   const [editItem, setEditItem] = useState<any>(null);
   const [selectedLoan, setSelectedLoan] = useState<LoanLog | null>(null);
 
-  // --- Auth & Sync ---
+  // --- Auth Listener ---
   useEffect(() => {
-    const initAuth = async () => {
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        await signInWithCustomToken(auth, __initial_auth_token);
-      } else {
-        await signInAnonymously(auth);
-      }
-    };
-    initAuth();
-
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       if (!u) setLoading(false);
@@ -88,9 +90,25 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // --- Data & Subscription Sync ---
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setMileageLogs([]);
+      setExpenses([]);
+      setLoans([]);
+      return;
+    }
 
+    // 1. LISTEN TO SUBSCRIPTION STATUS
+    const unsubSub = onSnapshot(doc(db, 'artifacts', appId, 'users', user.uid), (docSnap) => {
+      const data = docSnap.data();
+      // If no field exists, default to 'free' (Blocked)
+      const status = data?.subscription === 'subscribe' ? 'subscribe' : 'free';
+      setSubscription(status);
+      setLoading(false);
+    });
+
+    // 2. LISTEN TO DATA (Fetching continues in background, but UI is blocked)
     const unsubMileage = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'mileage_logs'), (snap) => {
       const logs = snap.docs.map(d => ({ id: d.id, type: 'mileage', ...d.data() } as MileageLog));
       logs.sort((a, b) => b.odometer - a.odometer);
@@ -101,14 +119,13 @@ export default function App() {
       const logs = snap.docs.map(d => ({ id: d.id, type: 'expense', ...d.data() } as ExpenseLog));
       logs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       setExpenses(logs);
-      setLoading(false);
     });
 
     const unsubLoans = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'loans'), (snap) => {
       const logs = snap.docs.map(d => {
         const data = d.data();
         return {
-          id: d.id,  
+          id: d.id,
           type: 'loan',
           ...data,
           repayments: data.repayments || [],
@@ -118,7 +135,7 @@ export default function App() {
       setLoans(logs);
     });
 
-    return () => { unsubMileage(); unsubExpenses(); unsubLoans(); };
+    return () => { unsubSub(); unsubMileage(); unsubExpenses(); unsubLoans(); };
   }, [user]);
 
   // --- Stats Calculation ---
@@ -128,46 +145,23 @@ export default function App() {
     const vehicleExpenses = expenses
       .filter(e => ['Fuel', 'Maintenance', 'Service', 'Insurance', 'Toll'].includes(e.category))
       .reduce((acc, log) => acc + log.amount, 0);
-
     const totalFuelVolume = expenses
       .filter(e => e.category === 'Fuel' && e.fuelVolume)
       .reduce((acc, log) => acc + (log.fuelVolume || 0), 0);
-
     const costPerKm = totalDistance > 0 ? (vehicleExpenses / totalDistance).toFixed(2) : '---';
-    const averageMileage = totalFuelVolume > 0 && totalDistance > 0
-      ? (totalDistance / totalFuelVolume).toFixed(1)
-      : '---';
-
+    const averageMileage = totalFuelVolume > 0 && totalDistance > 0 ? (totalDistance / totalFuelVolume).toFixed(1) : '---';
     const currentMonth = new Date().toISOString().slice(0, 7);
-    const monthlySpend = expenses
-      .filter(e => e.date.startsWith(currentMonth))
-      .reduce((acc, log) => acc + log.amount, 0);
-
-    let owedByMe = 0;
-    let owedToMe = 0;
-
+    const monthlySpend = expenses.filter(e => e.date.startsWith(currentMonth)).reduce((acc, log) => acc + log.amount, 0);
+    let owedByMe = 0; let owedToMe = 0;
     loans.forEach(l => {
       const totalRepaid = (l.repayments || []).reduce((sum, r) => sum + r.amount, 0);
       const balance = l.amount - totalRepaid;
       if (balance > 0) {
-        if (l.loanType === 'taken') owedByMe += balance;
-        else owedToMe += balance;
+        if (l.loanType === 'taken') owedByMe += balance; else owedToMe += balance;
       }
     });
-
     const netBalance = owedToMe - owedByMe;
-
-    return {
-      currentOdometer,
-      totalDistance,
-      vehicleExpenses,
-      costPerKm,
-      averageMileage,
-      monthlySpend,
-      owedByMe,
-      owedToMe,
-      netBalance
-    };
+    return { currentOdometer, totalDistance, vehicleExpenses, costPerKm, averageMileage, monthlySpend, owedByMe, owedToMe, netBalance };
   }, [mileageLogs, expenses, loans]);
 
   // --- Handlers ---
@@ -213,18 +207,12 @@ export default function App() {
         await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'expenses', editItem.id), data);
       } else {
         await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses'), { ...data, timestamp: Date.now() });
-
-        // Auto-create mileage log
         if (category === 'Fuel' && linkedOdometerEl?.value) {
           const reading = parseFloat(linkedOdometerEl.value);
           const lastReading = stats.currentOdometer;
           if (reading > lastReading) {
             await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'mileage_logs'), {
-              date: data.date,
-              odometer: reading,
-              distance: mileageLogs.length === 0 ? 0 : reading - lastReading,
-              fuelStatus: 'Main',
-              timestamp: Date.now()
+              date: data.date, odometer: reading, distance: mileageLogs.length === 0 ? 0 : reading - lastReading, fuelStatus: 'Main', timestamp: Date.now()
             });
           }
         }
@@ -232,7 +220,6 @@ export default function App() {
     } else if (type === 'loan') {
       const amount = parseFloat((form.elements.namedItem('amount') as HTMLInputElement).value);
       const currentRepayments = editItem?.repayments || [];
-
       const data = {
         loanType: (form.elements.namedItem('loanType') as HTMLInputElement).value,
         person: (form.elements.namedItem('person') as HTMLInputElement).value,
@@ -242,7 +229,6 @@ export default function App() {
         note: (form.elements.namedItem('note') as HTMLInputElement).value,
         repayments: currentRepayments
       };
-
       if (editItem) {
         await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'loans', editItem.id), data);
       } else {
@@ -258,15 +244,10 @@ export default function App() {
         note: (form.elements.namedItem('note') as HTMLInputElement).value
       };
       const updatedRepayments = [...(selectedLoan.repayments || []), newRepayment];
-      await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'loans', selectedLoan.id), {
-        repayments: updatedRepayments
-      });
+      await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'loans', selectedLoan.id), { repayments: updatedRepayments });
     }
 
-    setModalType(null);
-    setEditItem(null);
-    setSelectedLoan(null);
-    setIsFabOpen(false);
+    setModalType(null); setEditItem(null); setSelectedLoan(null); setIsFabOpen(false);
   };
 
   const deleteItem = async (col: string, id: string) => {
@@ -295,11 +276,19 @@ export default function App() {
 
   if (loading) return <LoadingSpinner />;
 
-  const combinedHistory = [
-    ...expenses,
-    ...mileageLogs,
-    ...loans
-  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || b.timestamp - a.timestamp);
+  // 1. If no user -> Show Login
+  if (!user) {
+    return <Auth />;
+  }
+
+  // 2. If user exists BUT subscription is not 'subscribe' -> Show Lock Screen
+  if (subscription !== 'subscribe') {
+    return <LockedScreen onLogout={() => signOut(auth)} />;
+  }
+
+  // 3. If user exists AND subscribed -> Show Dashboard
+  const combinedHistory = [...expenses, ...mileageLogs, ...loans]
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || b.timestamp - a.timestamp);
 
   const groupedHistory = combinedHistory.reduce((groups, item) => {
     const date = formatDate(item.date);
@@ -323,9 +312,10 @@ export default function App() {
             <div className="bg-orange-100 p-2 rounded-xl text-orange-600"><Wallet className="w-5 h-5" /></div>
             <span className="font-bold text-lg text-slate-800">Vyaya</span>
           </div>
-          <div className="text-xs font-semibold bg-slate-100 px-3 py-1.5 rounded-full text-slate-600">
-            {new Date().toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
-          </div>
+          {/* Logout Button */}
+          <button onClick={() => signOut(auth)} className="text-slate-400 hover:text-red-500 p-2 bg-slate-50 rounded-full transition-colors">
+            <LogOut className="w-5 h-5" />
+          </button>
         </div>
       </header>
 

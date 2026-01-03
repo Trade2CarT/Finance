@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Fuel, X, Zap, Droplet, ArrowDownLeft, ArrowUpRight, Banknote } from 'lucide-react';
 import { formatCurrency } from './utils';
-import { LoanLog, ExpenseLog, MileageLog } from './types';
+import type { LoanLog, ExpenseLog, MileageLog } from './types';
 
 // --- Types for Props ---
 interface BaseModalProps {
