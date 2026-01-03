@@ -35,11 +35,12 @@ export default function Auth() {
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                 const user = userCredential.user;
 
-                // Create user in DB with 'free' status (Blocked by default)
+                // Create user in DB with 'free' status and timestamp
                 await setDoc(doc(db, 'artifacts', appId, 'users', user.uid), {
                     email: user.email,
-                    subscription: 'free', // <--- YOU CHANGE THIS MANUALLY IN DB TO 'subscribe'
-                    createdAt: Date.now()
+                    subscription: 'free',
+                    createdAt: Date.now(), // <--- Crucial for the 7-day trial check
+                    subscriptionDate: null // <--- Will be set by Admin later
                 });
             }
         } catch (err: any) {
@@ -57,7 +58,7 @@ export default function Auth() {
                     <div className="bg-orange-100 p-3 rounded-full text-orange-600 mb-3">
                         <Wallet className="w-8 h-8" />
                     </div>
-                    <h1 className="text-2xl font-bold text-slate-800">Vyaya Finance</h1>
+                    <h1 className="text-2xl font-bold text-slate-800">Trade2cart Finance</h1>
                     <p className="text-slate-400 text-sm">Track expenses & loans</p>
                 </div>
 

@@ -1,10 +1,7 @@
-// Modals.tsx
 import React, { useState, useEffect } from 'react';
 import { Fuel, X, Zap, Droplet, ArrowDownLeft, ArrowUpRight, Banknote } from 'lucide-react';
-import { formatCurrency } from './utils';
-import type { LoanLog, ExpenseLog, MileageLog } from './types';
+import type { ExpenseLog, MileageLog, LoanLog } from './types';
 
-// --- Types for Props ---
 interface BaseModalProps {
     onClose: () => void;
     onSave: (e: React.FormEvent) => void;
@@ -16,16 +13,21 @@ interface ExpenseModalProps extends BaseModalProps {
 }
 
 export const ExpenseModal: React.FC<ExpenseModalProps> = ({ onClose, onSave, editItem, currentOdometer }) => {
+    // Default to Fuel if adding from "Vehicle Mode" logic could be added, but standard is fine
     const [cat, setCat] = useState(editItem?.category || 'Groceries');
     const [price, setPrice] = useState(editItem?.fuelPrice?.toString() || '');
     const [vol, setVol] = useState(editItem?.fuelVolume?.toString() || '');
     const [amt, setAmt] = useState(editItem?.amount?.toString() || '');
 
+    // Auto-calculate Volume when Price or Amount changes
     useEffect(() => {
         if (cat === 'Fuel' && price && amt) {
             const p = parseFloat(price);
             const a = parseFloat(amt);
-            if (p > 0) setVol((a / p).toFixed(2));
+            if (p > 0) {
+                // Only update vol if it wasn't manually typed recently (simple check)
+                setVol((a / p).toFixed(2));
+            }
         }
     }, [price, amt, cat]);
 
@@ -81,29 +83,29 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({ onClose, onSave, edi
 
                                 {!editItem && (
                                     <div>
-                                        <label className="text-xs text-blue-600 font-bold block mb-1">Current Odometer (For Mileage)</label>
+                                        <label className="text-xs text-blue-600 font-bold block mb-1">Current Odometer (Optional)</label>
                                         <div className="flex items-center gap-2">
                                             <input
                                                 name="linkedOdometer"
                                                 type="number"
                                                 placeholder={currentOdometer.toString()}
-                                                defaultValue={currentOdometer > 0 ? currentOdometer : ''}
                                                 className="w-full p-2 rounded-lg border-blue-200 outline-none font-bold text-slate-700"
                                             />
                                             <span className="text-xs text-blue-400 font-medium">km</span>
                                         </div>
-                                        <p className="text-[10px] text-blue-400 mt-1">Updates your odometer automatically</p>
+                                        <p className="text-[10px] text-blue-400 mt-1">Enter to auto-update mileage log</p>
                                     </div>
                                 )}
 
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label className="text-xs text-blue-600 font-bold block mb-1">Price / L</label>
-                                        <input name="fuelPrice" type="number" placeholder="102" value={price} onChange={e => setPrice(e.target.value)} className="w-full p-2 rounded-lg border-blue-200 outline-none" />
+                                        <input name="fuelPrice" type="number" step="0.01" placeholder="e.g. 102" value={price} onChange={e => setPrice(e.target.value)} className="w-full p-2 rounded-lg border-blue-200 outline-none" />
                                     </div>
                                     <div>
-                                        <label className="text-xs text-blue-600 font-bold block mb-1">Liters (Calc)</label>
-                                        <input name="fuelVolume" type="number" readOnly placeholder="Calc..." value={vol} className="w-full p-2 rounded-lg border-blue-200 bg-blue-100/50 outline-none" />
+                                        <label className="text-xs text-blue-600 font-bold block mb-1">Liters</label>
+                                        {/* Removed readOnly so you can fix it manually */}
+                                        <input name="fuelVolume" type="number" step="0.01" placeholder="Liters" value={vol} onChange={e => setVol(e.target.value)} className="w-full p-2 rounded-lg border-blue-200 bg-white outline-none font-bold" />
                                     </div>
                                 </div>
                             </div>
@@ -136,7 +138,7 @@ export const MileageModal: React.FC<MileageModalProps> = ({ onClose, onSave, edi
             <form onSubmit={onSave} className="space-y-4">
                 <div>
                     <label className="text-sm font-medium text-slate-600">New Reading (km)</label>
-                    <div className="flex items-center mt-1"><input name="reading" type="number" step="0.1" required defaultValue={editItem?.odometer || (currentOdometer + 10)} className="w-full text-2xl font-bold p-3 bg-slate-50 rounded-xl border border-slate-200 outline-none" /></div>
+                    <div className="flex items-center mt-1"><input name="reading" type="number" step="0.1" required defaultValue={editItem?.odometer || (currentOdometer ? currentOdometer + 10 : '')} placeholder="0" className="w-full text-2xl font-bold p-3 bg-slate-50 rounded-xl border border-slate-200 outline-none" /></div>
                     {!editItem && <p className="text-xs text-slate-400 mt-2">Current: {currentOdometer} km</p>}
                 </div>
                 <div>
@@ -234,16 +236,16 @@ export const RepaymentModal: React.FC<RepaymentModalProps> = ({ onClose, onSave,
                 <div className="bg-slate-50 p-4 rounded-xl mb-4 border border-slate-100">
                     <div className="flex justify-between text-sm mb-1">
                         <span className="text-slate-500">Total Loan</span>
-                        <span className="font-bold">{formatCurrency(selectedLoan?.amount || 0)}</span>
+                        <span className="font-bold">₹{selectedLoan?.amount}</span>
                     </div>
                     <div className="flex justify-between text-sm mb-1">
                         <span className="text-slate-500">Paid So Far</span>
-                        <span className="font-bold text-green-600">{formatCurrency((selectedLoan?.repayments || []).reduce((s, r) => s + r.amount, 0))}</span>
+                        <span className="font-bold text-green-600">₹{(selectedLoan?.repayments || []).reduce((s, r) => s + r.amount, 0)}</span>
                     </div>
                     <div className="border-t border-slate-200 my-2"></div>
                     <div className="flex justify-between text-sm">
                         <span className="text-slate-500">Remaining</span>
-                        <span className="font-bold text-red-500">{formatCurrency((selectedLoan?.amount || 0) - ((selectedLoan?.repayments || []).reduce((s, r) => s + r.amount, 0)))}</span>
+                        <span className="font-bold text-red-500">₹{(selectedLoan?.amount || 0) - ((selectedLoan?.repayments || []).reduce((s, r) => s + r.amount, 0))}</span>
                     </div>
                 </div>
 
