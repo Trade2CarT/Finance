@@ -366,7 +366,7 @@ export default function App() {
             <img
               src="../logo.PNG"
               alt="Logo"
-              class="h-12 w-12 rounded-lg bg-white p-1 shadow-md object-contain"
+              className="h-12 w-12 rounded-lg bg-white p-1 shadow-md object-contain"
             />
 
             <div>
