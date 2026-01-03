@@ -108,7 +108,7 @@ export default function App() {
       const logs = snap.docs.map(d => {
         const data = d.data();
         return {
-          id: d.id,
+          id: d.id,  
           type: 'loan',
           ...data,
           repayments: data.repayments || [],
