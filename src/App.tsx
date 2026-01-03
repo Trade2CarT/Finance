@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import {
   onAuthStateChanged,
   signOut,
- type User
+  type User
 } from 'firebase/auth';
 import {
   collection,
@@ -12,12 +12,10 @@ import {
   deleteDoc,
   doc
 } from 'firebase/firestore';
-// import img from "../logo.PNG";
 import {
   Car, Fuel, Plus, Download, Trash2, Edit2, History, ShoppingBag,
   Home, Handshake, Gauge, LogOut, Lock, MessageCircle, ChevronDown, Info,
-  Clock, Banknote // <--- Added these back because they are used in Loan cards
-  // Wallet was removed because you commented it out
+  Clock, Banknote // <--- Fixed: Added missing imports
 } from 'lucide-react';
 
 import type { MileageLog, ExpenseLog, LoanLog, TabView, DashboardMode } from './components/types';
@@ -25,6 +23,9 @@ import { formatCurrency, formatDate } from './components/utils';
 import { ExpenseModal, MileageModal, LoanModal, RepaymentModal } from './components/Modals';
 import Auth from './components/Auth';
 import { auth, db, appId } from './components/firebaseConfig';
+
+// --- IMPORT IMAGE FROM ASSETS ---
+import logo from './assets/logo.PNG';
 
 // --- LAZY LOAD CHARTS ---
 const Recharts = React.lazy(() => import('recharts').then(module => ({
@@ -59,7 +60,7 @@ const Recharts = React.lazy(() => import('recharts').then(module => ({
               <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
               <XAxis type="number" hide />
               <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={60} />
-              {/* Fixed Type Error: Handle undefined value properly */}
+              {/* Fixed Type Error */}
               <Tooltip formatter={(value: number | undefined) => [formatCurrency(value || 0), "Amount"]} cursor={{ fill: 'transparent' }} />
               <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={30}>
                 {data.map((entry: any, index: number) => (
@@ -127,28 +128,23 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Access State
   const [hasAccess, setHasAccess] = useState(false);
   const [daysLeft, setDaysLeft] = useState(0);
 
   const [activeTab, setActiveTab] = useState<TabView>('dashboard');
   const [dashMode, setDashMode] = useState<DashboardMode>('wallet');
 
-  // Data State
   const [mileageLogs, setMileageLogs] = useState<MileageLog[]>([]);
   const [expenses, setExpenses] = useState<ExpenseLog[]>([]);
   const [loans, setLoans] = useState<LoanLog[]>([]);
 
-  // Pagination
   const [historyLimit, setHistoryLimit] = useState(20);
 
-  // UI State
   const [isFabOpen, setIsFabOpen] = useState(false);
   const [modalType, setModalType] = useState<'mileage' | 'expense' | 'loan' | 'repayment' | null>(null);
   const [editItem, setEditItem] = useState<any>(null);
   const [selectedLoan, setSelectedLoan] = useState<LoanLog | null>(null);
 
-  // --- Auth Listener ---
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -157,7 +153,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // --- Data & Subscription Sync ---
   useEffect(() => {
     if (!user) {
       setMileageLogs([]);
@@ -166,7 +161,6 @@ export default function App() {
       return;
     }
 
-    // 1. Subscription Logic
     const unsubSub = onSnapshot(doc(db, 'artifacts', appId, 'users', user.uid), (docSnap) => {
       const data = docSnap.data();
       const now = Date.now();
@@ -203,7 +197,6 @@ export default function App() {
       setLoading(false);
     });
 
-    // 2. Data Listeners
     const unsubMileage = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'mileage_logs'), (snap) => {
       setMileageLogs(snap.docs.map(d => ({ id: d.id, type: 'mileage', ...d.data() } as MileageLog)).sort((a, b) => b.odometer - a.odometer));
     });
@@ -222,7 +215,6 @@ export default function App() {
     return () => { unsubSub(); unsubMileage(); unsubExpenses(); unsubLoans(); };
   }, [user]);
 
-  // --- Handlers ---
   const handleSave = async (e: React.FormEvent, type: 'mileage' | 'expense' | 'loan' | 'repayment') => {
     e.preventDefault();
     if (!user) return;
@@ -307,7 +299,6 @@ export default function App() {
     link.click();
   };
 
-  // --- STATS ---
   const stats = useMemo(() => {
     const sortedLogs = [...mileageLogs].sort((a, b) => b.odometer - a.odometer);
     const currentOdometer = sortedLogs.length > 0 ? sortedLogs[0].odometer : 0;
@@ -335,7 +326,6 @@ export default function App() {
     };
   }, [mileageLogs, expenses, loans]);
 
-  // --- HISTORY ---
   const combinedHistory = useMemo(() => {
     return [...expenses, ...mileageLogs, ...loans]
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || b.timestamp - a.timestamp);
@@ -363,13 +353,14 @@ export default function App() {
       <header className="bg-white sticky top-0 z-20 border-b border-slate-100 px-4 py-3 shadow-sm">
         <div className="max-w-md mx-auto flex justify-between items-center">
           <div className="flex items-center gap-2">
-            {/* Wallet icon commented out as per your code */}
-            {/* <div className="bg-orange-100 p-2 rounded-xl text-orange-600"><Wallet className="w-5 h-5" /></div> */}
+
+            {/* FIXED LOGO IMPORT AND USAGE */}
             <img
-              src="/logo.PNG"
+              src={logo}
               alt="Logo"
               className="h-12 w-12 rounded-lg bg-white p-1 shadow-md object-contain"
             />
+
             <div>
               <span className="font-bold text-lg text-slate-800 block leading-tight">Trade2cart</span>
               <span className="text-[10px] text-slate-400 font-bold tracking-wider">FINANCE</span>
