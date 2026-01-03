@@ -12,6 +12,7 @@ import {
   deleteDoc,
   doc
 } from 'firebase/firestore';
+import img from "../logo.PNG";
 import {
   Car, Fuel, Plus, Download, Trash2, Edit2, History, ShoppingBag,
   Home, Handshake, Gauge, LogOut, Lock, MessageCircle, ChevronDown, Info,
@@ -365,7 +366,7 @@ export default function App() {
             {/* Wallet icon commented out as per your code */}
             {/* <div className="bg-orange-100 p-2 rounded-xl text-orange-600"><Wallet className="w-5 h-5" /></div> */}
             <img
-              src="../logo.PNG"
+              src={img}
               alt="Logo"
               className="h-12 w-12 rounded-lg bg-white p-1 shadow-md object-contain"
             />
