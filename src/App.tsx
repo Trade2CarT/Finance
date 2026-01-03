@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import {
   onAuthStateChanged,
   signOut,
-  type User
+ type User
 } from 'firebase/auth';
 import {
   collection,
@@ -14,10 +14,11 @@ import {
 } from 'firebase/firestore';
 import {
   Car, Fuel, Plus, Download, Trash2, Edit2, History, ShoppingBag,
-  Home, Wallet, Handshake, Gauge, LogOut, Lock, MessageCircle, ChevronDown, Info
+  Home, Handshake, Gauge, LogOut, Lock, MessageCircle, ChevronDown, Info,
+  Clock, Banknote // <--- Added these back because they are used in Loan cards
+  // Wallet was removed because you commented it out
 } from 'lucide-react';
 
-// Removed unused 'Repayment' from imports
 import type { MileageLog, ExpenseLog, LoanLog, TabView, DashboardMode } from './components/types';
 import { formatCurrency, formatDate } from './components/utils';
 import { ExpenseModal, MileageModal, LoanModal, RepaymentModal } from './components/Modals';
@@ -57,8 +58,8 @@ const Recharts = React.lazy(() => import('recharts').then(module => ({
               <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
               <XAxis type="number" hide />
               <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={60} />
-              {/* Fixed Type Error: Handle undefined value */}
-              <Tooltip formatter={(value: number) => [formatCurrency(value), "Amount"]} cursor={{ fill: 'transparent' }} />
+              {/* Fixed Type Error: Handle undefined value properly */}
+              <Tooltip formatter={(value: number | undefined) => [formatCurrency(value || 0), "Amount"]} cursor={{ fill: 'transparent' }} />
               <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={30}>
                 {data.map((entry: any, index: number) => (
                   <Cell key={`cell-${index}`} fill={entry.fill} />
@@ -171,7 +172,6 @@ export default function App() {
 
       let createdAt = now;
       if (data?.createdAt) {
-        // Handle Firestore Timestamp or Number
         createdAt = typeof data.createdAt.toMillis === 'function' ? data.createdAt.toMillis() : data.createdAt;
       }
 
@@ -362,13 +362,13 @@ export default function App() {
       <header className="bg-white sticky top-0 z-20 border-b border-slate-100 px-4 py-3 shadow-sm">
         <div className="max-w-md mx-auto flex justify-between items-center">
           <div className="flex items-center gap-2">
+            {/* Wallet icon commented out as per your code */}
             {/* <div className="bg-orange-100 p-2 rounded-xl text-orange-600"><Wallet className="w-5 h-5" /></div> */}
             <img
               src="../logo.PNG"
               alt="Logo"
               className="h-12 w-12 rounded-lg bg-white p-1 shadow-md object-contain"
             />
-
             <div>
               <span className="font-bold text-lg text-slate-800 block leading-tight">Trade2cart</span>
               <span className="text-[10px] text-slate-400 font-bold tracking-wider">FINANCE</span>
