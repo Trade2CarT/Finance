@@ -25,7 +25,7 @@ import Auth from './components/Auth';
 import { auth, db, appId } from './components/firebaseConfig';
 
 // --- IMPORT IMAGE FROM ASSETS ---
-// import logo from './assets/logo.PNG';
+import logo from './assets/logo.PNG';
 
 // --- LAZY LOAD CHARTS ---
 const Recharts = React.lazy(() => import('recharts').then(module => ({
