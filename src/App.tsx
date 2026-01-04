@@ -18,7 +18,7 @@ import {
   Car, Fuel, Plus, Download, Trash2, Edit2, History, ShoppingBag,
   Home, Handshake, Gauge, LogOut, Lock, MessageCircle, ChevronDown,
   Clock, Banknote, Settings, Briefcase,
-  PiggyBank, Coins
+  PiggyBank,  Coins
 } from 'lucide-react';
 
 import type { MileageLog, ExpenseLog, LoanLog, TabView, DashboardMode, VehicleSettings, SubscriptionDetails } from './components/types';
@@ -386,24 +386,17 @@ export default function App() {
     const averageMileage = totalFuelVolume > 0 && totalDistance > 0 ? (totalDistance / totalFuelVolume).toFixed(1) : '---';
 
     const currentMonth = new Date().toISOString().slice(0, 7);
-    const monthlySpend = expenses.filter(e => e.date.startsWith(currentMonth) && e.txnType === 'expense').reduce((acc, log) => acc + log.amount, 0);
-    const monthlyIncome = expenses.filter(e => e.date.startsWith(currentMonth) && e.txnType === 'income').reduce((acc, log) => acc + log.amount, 0);
-
-    let owedByMe = 0; let owedToMe = 0;
-    loans.forEach(l => {
-      const balance = l.amount - (l.repayments || []).reduce((sum, r) => sum + r.amount, 0);
-      if (balance > 0) l.loanType === 'taken' ? owedByMe += balance : owedToMe += balance;
-    });
 
     // --- FUNDS POTS CALCULATION ---
-    const pots: Record<string, number> = { Salary: 0, Savings: 0, Bonus: 0, Stocks: 0, Borrowed: 0, Cash: 0 };
+    const pots: Record<string, number> = { Salary: 0, Savings: 0, Bonus: 0, Stocks: 0, Borrowed: 0, Cash: 0, Others: 0 };
+    const POT_NAMES = new Set(['Salary', 'Savings', 'Bonus', 'Stocks', 'Borrowed', 'Cash', 'Others']);
 
     // 1. Add Income to pots
     expenses.filter(e => e.txnType === 'income').forEach(e => {
       if (pots.hasOwnProperty(e.category)) {
         pots[e.category] += e.amount;
       } else {
-        pots.Cash += e.amount;
+        pots.Others += e.amount;
       }
     });
 
@@ -412,11 +405,16 @@ export default function App() {
       pots.Borrowed += l.amount;
     });
 
-    // 3. Deduct Expenses (Spent from specific pots)
+    // 3. Deduct Expenses (Spent from specific pots) & Handle TRANSFERS
     expenses.filter(e => e.txnType === 'expense').forEach(e => {
       const src = e.paymentSource || 'Salary';
       if (pots.hasOwnProperty(src)) {
         pots[src] -= e.amount;
+      }
+
+      // TRANSFER LOGIC: If category is a Pot, ADD it to that pot.
+      if (pots.hasOwnProperty(e.category)) {
+        pots[e.category] += e.amount;
       }
     });
 
@@ -443,8 +441,29 @@ export default function App() {
       });
     });
 
+    // --- MONTHLY SPEND & INCOME CALCULATION ---
+    // Fix: Exclude transfers (where category is a pot name) from "Monthly Spend"
+    const monthlySpend = expenses
+      .filter(e => e.date.startsWith(currentMonth) && e.txnType === 'expense')
+      .reduce((acc, log) => {
+        if (POT_NAMES.has(log.category)) return acc; // Don't count transfers as spending
+        return acc + log.amount;
+      }, 0);
+
+    const monthlyIncome = expenses
+      .filter(e => e.date.startsWith(currentMonth) && e.txnType === 'income')
+      .reduce((acc, log) => acc + log.amount, 0);
+
+    let owedByMe = 0; let owedToMe = 0;
+    loans.forEach(l => {
+      const balance = l.amount - (l.repayments || []).reduce((sum, r) => sum + r.amount, 0);
+      if (balance > 0) l.loanType === 'taken' ? owedByMe += balance : owedToMe += balance;
+    });
+
     return {
-      currentOdometer, totalDistance, vehicleExpenses, costPerKm, averageMileage, monthlySpend, monthlyIncome, owedByMe, owedToMe,
+      currentOdometer, totalDistance, vehicleExpenses, costPerKm, averageMileage,
+      monthlySpend, monthlyIncome, // Added monthlyIncome
+      owedByMe, owedToMe,
       pots,
       needsMoreData: mileageLogs.length === 1
     };
@@ -470,7 +489,8 @@ export default function App() {
 
   const loanStatsData = [{ name: 'Owed to Me', value: stats.owedToMe, fill: '#10B981' }, { name: 'I Owe', value: stats.owedByMe, fill: '#EF4444' }];
 
-  const expenseOnly = expenses.filter(e => e.txnType === 'expense');
+  // Exclude transfers from pie chart to avoid confusion
+  const expenseOnly = expenses.filter(e => e.txnType === 'expense' && !['Salary', 'Savings', 'Bonus', 'Stocks', 'Borrowed', 'Cash', 'Others'].includes(e.category));
 
   return (
     <div className="min-h-screen bg-slate-50/80 pb-28 font-sans text-slate-800">
@@ -509,9 +529,9 @@ export default function App() {
 
             {dashMode === 'wallet' ? (
               <>
-                {/* Available Funds Grid - NOW 3x2 Grid for cleaner look including CASH */}
+                {/* Available Funds Grid - 3x2 Grid */}
                 <div className="grid grid-cols-3 gap-3 mb-6">
-                  {/* Row 1: The Mains */}
+                  {/* Row 1 */}
                   <div className="bg-white p-3.5 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all text-center">
                     <div className="bg-emerald-50 w-8 h-8 rounded-full flex items-center justify-center text-emerald-600 mb-2 mx-auto"><Briefcase className="w-4 h-4" /></div>
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Salary</p>
@@ -528,7 +548,7 @@ export default function App() {
                     <p className="text-base font-black text-slate-800">{formatCurrency(stats.pots.Savings)}</p>
                   </div>
 
-                  {/* Row 2: Secondary Sources */}
+                  {/* Row 2 */}
                   <div className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm text-center">
                     <p className="text-[9px] font-bold text-slate-400 uppercase mb-1 text-red-400">Borrowed</p>
                     <p className="font-bold text-slate-700 text-sm">{formatCurrency(stats.pots.Borrowed)}</p>
@@ -550,7 +570,7 @@ export default function App() {
                       <h2 className="text-4xl font-black tracking-tight">{formatCurrency(stats.monthlySpend)}</h2>
                     </div>
                     <div className="text-right">
-                      <p className="text-emerald-400 text-[10px] font-bold uppercase tracking-wide mb-1">Total Earned</p>
+                      <p className="text-emerald-400 text-[10px] font-bold uppercase tracking-wide mb-1">Earned</p>
                       <p className="font-bold text-white text-xl flex items-center justify-end gap-1">
                         <span className="text-emerald-500 text-sm">+</span>
                         {formatCurrency(stats.monthlyIncome)}
