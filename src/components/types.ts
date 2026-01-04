@@ -1,3 +1,5 @@
+// src/components/types.ts
+
 export interface MileageLog {
     id: string;
     type: 'mileage';
@@ -40,10 +42,17 @@ export interface LoanLog {
     timestamp: number;
 }
 
-// --- THIS IS THE MISSING PART ---
 export interface VehicleSettings {
     tankCapacity: number;
     reserveCapacity: number;
+}
+
+// --- NEW: Subscription Interface ---
+export interface SubscriptionDetails {
+    plan: 'free' | 'monthly' | 'yearly';
+    status: 'active' | 'expired';
+    expiryDate: string | null; // e.g., "12 Jan 2025"
+    daysLeft: number;
 }
 
 export type TabView = 'dashboard' | 'history' | 'analytics';
