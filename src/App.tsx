@@ -243,44 +243,51 @@ export default function App() {
     return () => { unsubSub(); unsubMileage(); unsubExpenses(); unsubLoans(); };
   }, [user]);
 
+  // --- FIXED HANDLE SAVE FUNCTION ---
   const handleSave = async (e: React.FormEvent, type: 'mileage' | 'expense' | 'loan' | 'repayment' | 'settings') => {
     e.preventDefault();
     if (!user) return;
     const form = e.target as HTMLFormElement;
 
+    // Helper to safely get value from named item, defaulting to null or empty string
+    const getVal = (name: string) => {
+      const el = form.elements.namedItem(name);
+      return (el as HTMLInputElement | null)?.value || '';
+    };
+
     if (type === 'settings') {
-      const tankCapacity = parseFloat((form.elements.namedItem('tankCapacity') as HTMLInputElement).value);
-      const reserveCapacity = parseFloat((form.elements.namedItem('reserveCapacity') as HTMLInputElement).value);
+      const tankCapacity = parseFloat(getVal('tankCapacity')) || 0;
+      const reserveCapacity = parseFloat(getVal('reserveCapacity')) || 0;
       await setDoc(doc(db, 'artifacts', appId, 'users', user.uid), { settings: { tankCapacity, reserveCapacity } }, { merge: true });
     }
 
     else if (type === 'mileage') {
-      const reading = parseFloat((form.elements.namedItem('reading') as HTMLInputElement).value);
-      const date = (form.elements.namedItem('date') as HTMLInputElement).value;
-      const fuelStatus = (form.elements.namedItem('fuelStatus') as HTMLInputElement).value;
+      const reading = parseFloat(getVal('reading'));
+      const date = getVal('date');
+      const fuelStatus = getVal('fuelStatus') || null;
+
       if (editItem) {
         await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'mileage_logs', editItem.id), { odometer: reading, date, fuelStatus });
       } else {
         await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'mileage_logs'), { date, odometer: reading, distance: 0, fuelStatus, timestamp: Date.now() });
       }
-    } else if (type === 'expense') {
-      const amount = parseFloat((form.elements.namedItem('amount') as HTMLInputElement).value);
-      const category = (form.elements.namedItem('category') as HTMLInputElement).value;
-      const note = (form.elements.namedItem('note') as HTMLInputElement).value;
-      const date = (form.elements.namedItem('date') as HTMLInputElement).value;
-      const fuelPriceEl = form.elements.namedItem('fuelPrice') as HTMLInputElement | null;
-      const fuelVolumeEl = form.elements.namedItem('fuelVolume') as HTMLInputElement | null;
+    }
 
-      // Get the NEW MANDATORY fields for Fuel
-      const linkedOdometerEl = form.elements.namedItem('linkedOdometer') as HTMLInputElement | null;
-      // Get Radio button value for fuelStatus
-      const fuelStatusEl = (form.elements.namedItem('fuelStatus') as RadioNodeList | null);
-      const fuelStatus = fuelStatusEl ? fuelStatusEl.value : null;
+    else if (type === 'expense') {
+      const amount = parseFloat(getVal('amount'));
+      const category = getVal('category');
+      const note = getVal('note');
+      const date = getVal('date');
+
+      const fuelPriceVal = getVal('fuelPrice');
+      const fuelVolumeVal = getVal('fuelVolume');
+      const linkedOdometerVal = getVal('linkedOdometer');
+      const fuelStatus = getVal('fuelStatus') || null;
 
       const data = {
         date, category, amount, note, timestamp: Date.now(),
-        fuelPrice: fuelPriceEl?.value ? parseFloat(fuelPriceEl.value) : null,
-        fuelVolume: fuelVolumeEl?.value ? parseFloat(fuelVolumeEl.value) : null,
+        fuelPrice: fuelPriceVal ? parseFloat(fuelPriceVal) : null,
+        fuelVolume: fuelVolumeVal ? parseFloat(fuelVolumeVal) : null,
       };
 
       if (editItem) {
@@ -288,26 +295,33 @@ export default function App() {
       } else {
         await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses'), data);
 
-        // --- AUTO SAVE MILEAGE LOG IF CATEGORY IS FUEL ---
-        if (category === 'Fuel' && linkedOdometerEl?.value && fuelStatus) {
+        if (category === 'Fuel' && linkedOdometerVal && fuelStatus) {
           await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'mileage_logs'), {
             date,
-            odometer: parseFloat(linkedOdometerEl.value),
+            odometer: parseFloat(linkedOdometerVal),
             distance: 0,
-            fuelStatus: fuelStatus, // NOW SAVING STATUS CORRECTLY
+            fuelStatus: fuelStatus,
             timestamp: Date.now()
           });
         }
       }
-    } else if (type === 'loan') {
-      const amount = parseFloat((form.elements.namedItem('amount') as HTMLInputElement).value);
+    }
+
+    else if (type === 'loan') {
+      const amount = parseFloat(getVal('amount'));
+      const loanType = getVal('loanType');
+      const person = getVal('person');
+      const date = getVal('date');
+      const dueDate = getVal('dueDate');
+      const note = getVal('note'); // Safe even if field is missing
+
       const data = {
-        loanType: (form.elements.namedItem('loanType') as HTMLInputElement).value,
-        person: (form.elements.namedItem('person') as HTMLInputElement).value,
+        loanType,
+        person,
         amount,
-        date: (form.elements.namedItem('date') as HTMLInputElement).value,
-        dueDate: (form.elements.namedItem('dueDate') as HTMLInputElement).value,
-        note: (form.elements.namedItem('note') as HTMLInputElement).value,
+        date,
+        dueDate,
+        note,
         repayments: editItem?.repayments || []
       };
       if (editItem) {
@@ -315,13 +329,18 @@ export default function App() {
       } else {
         await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'loans'), { ...data, timestamp: Date.now() });
       }
-    } else if (type === 'repayment' && selectedLoan) {
-      const amount = parseFloat((form.elements.namedItem('amount') as HTMLInputElement).value);
+    }
+
+    else if (type === 'repayment' && selectedLoan) {
+      const amount = parseFloat(getVal('amount'));
+      const date = getVal('date');
+      const note = getVal('note');
+
       const rep = {
         id: crypto.randomUUID(),
         amount,
-        date: (form.elements.namedItem('date') as HTMLInputElement).value,
-        note: (form.elements.namedItem('note') as HTMLInputElement).value
+        date,
+        note
       };
       await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'loans', selectedLoan.id), {
         repayments: [...selectedLoan.repayments, rep]
@@ -429,17 +448,6 @@ export default function App() {
             {dashMode === 'wallet' ? (
               <>
                 <div className="relative bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-7 text-white shadow-2xl shadow-slate-300 overflow-hidden">
-                  {/* --- BRANDED WATERMARK --- */}
-                  {/* <div className="absolute top-5 right-5 w-10 h-10 rounded-xl bg-white/10 backdrop-blur-md p-1.5
-                flex items-center justify-center border border-white/20 shadow-lg">
-                    <img
-                      src="/logo.PNG"
-                      alt="Icon"
-                      className="w-full h-full object-contain invert brightness-0 opacity-90"
-                    />
-                  </div> */}
-
-
                   <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1 relative z-10">Total Spent This Month</p>
                   <h2 className="text-5xl font-black tracking-tight relative z-10">{formatCurrency(stats.monthlySpend)}</h2>
 
