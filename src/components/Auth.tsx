@@ -53,7 +53,8 @@ export default function Auth() {
         <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4">
             <div className="bg-white w-full max-w-md rounded-2xl p-8 shadow-xl border border-slate-100">
                 <div className="flex flex-col items-center mb-8">
-                    <div className="bg-orange-100 p-3 rounded-full text-orange-600 mb-3"><Wallet className="w-8 h-8" /></div>
+                    <img src="/logo.PNG" alt="Logo" className="h-10 w-10 rounded-lg bg-white p-0.5 shadow-sm object-contain border border-slate-100" />
+                    
                     <h1 className="text-2xl font-bold text-slate-800">Trade2cart Finance</h1>
                     <p className="text-slate-400 text-sm">Track expenses & loans</p>
                 </div>
