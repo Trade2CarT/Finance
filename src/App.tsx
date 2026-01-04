@@ -17,8 +17,8 @@ import {
 import {
   Car, Fuel, Plus, Download, Trash2, Edit2, History, ShoppingBag,
   Home, Handshake, Gauge, LogOut, Lock, MessageCircle, ChevronDown,
-  Clock, Banknote, Settings, Briefcase, 
-  PiggyBank
+  Clock, Banknote, Settings, Briefcase,
+  PiggyBank, Coins
 } from 'lucide-react';
 
 import type { MileageLog, ExpenseLog, LoanLog, TabView, DashboardMode, VehicleSettings, SubscriptionDetails } from './components/types';
@@ -387,6 +387,7 @@ export default function App() {
 
     const currentMonth = new Date().toISOString().slice(0, 7);
     const monthlySpend = expenses.filter(e => e.date.startsWith(currentMonth) && e.txnType === 'expense').reduce((acc, log) => acc + log.amount, 0);
+    const monthlyIncome = expenses.filter(e => e.date.startsWith(currentMonth) && e.txnType === 'income').reduce((acc, log) => acc + log.amount, 0);
 
     let owedByMe = 0; let owedToMe = 0;
     loans.forEach(l => {
@@ -395,7 +396,6 @@ export default function App() {
     });
 
     // --- FUNDS POTS CALCULATION ---
-    // FIXED: Explicitly typed as Record<string, number> to prevent TS7053 errors
     const pots: Record<string, number> = { Salary: 0, Savings: 0, Bonus: 0, Stocks: 0, Borrowed: 0, Cash: 0 };
 
     // 1. Add Income to pots
@@ -444,7 +444,7 @@ export default function App() {
     });
 
     return {
-      currentOdometer, totalDistance, vehicleExpenses, costPerKm, averageMileage, monthlySpend, owedByMe, owedToMe,
+      currentOdometer, totalDistance, vehicleExpenses, costPerKm, averageMileage, monthlySpend, monthlyIncome, owedByMe, owedToMe,
       pots,
       needsMoreData: mileageLogs.length === 1
     };
@@ -509,38 +509,56 @@ export default function App() {
 
             {dashMode === 'wallet' ? (
               <>
-                {/* Available Funds Grid */}
-                <div className="grid grid-cols-2 gap-3 mb-2">
-                  <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
-                    <div className="bg-emerald-50 w-8 h-8 rounded-full flex items-center justify-center text-emerald-600 mb-2"><Briefcase className="w-4 h-4" /></div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Salary</p>
-                    <p className="text-lg font-black text-slate-800">{formatCurrency(stats.pots.Salary)}</p>
-                  </div>
-                  <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
-                    <div className="bg-pink-50 w-8 h-8 rounded-full flex items-center justify-center text-pink-600 mb-2"><PiggyBank className="w-4 h-4" /></div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Savings</p>
-                    <p className="text-lg font-black text-slate-800">{formatCurrency(stats.pots.Savings)}</p>
-                  </div>
-                </div>
+                {/* Available Funds Grid - NOW 3x2 Grid for cleaner look including CASH */}
                 <div className="grid grid-cols-3 gap-3 mb-6">
+                  {/* Row 1: The Mains */}
+                  <div className="bg-white p-3.5 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all text-center">
+                    <div className="bg-emerald-50 w-8 h-8 rounded-full flex items-center justify-center text-emerald-600 mb-2 mx-auto"><Briefcase className="w-4 h-4" /></div>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Salary</p>
+                    <p className="text-base font-black text-slate-800">{formatCurrency(stats.pots.Salary)}</p>
+                  </div>
+                  <div className="bg-white p-3.5 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all text-center">
+                    <div className="bg-orange-50 w-8 h-8 rounded-full flex items-center justify-center text-orange-600 mb-2 mx-auto"><Coins className="w-4 h-4" /></div>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Cash</p>
+                    <p className="text-base font-black text-slate-800">{formatCurrency(stats.pots.Cash)}</p>
+                  </div>
+                  <div className="bg-white p-3.5 rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all text-center">
+                    <div className="bg-pink-50 w-8 h-8 rounded-full flex items-center justify-center text-pink-600 mb-2 mx-auto"><PiggyBank className="w-4 h-4" /></div>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Savings</p>
+                    <p className="text-base font-black text-slate-800">{formatCurrency(stats.pots.Savings)}</p>
+                  </div>
+
+                  {/* Row 2: Secondary Sources */}
                   <div className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm text-center">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Borrowed</p>
-                    <p className="font-black text-slate-700 text-sm">{formatCurrency(stats.pots.Borrowed)}</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase mb-1 text-red-400">Borrowed</p>
+                    <p className="font-bold text-slate-700 text-sm">{formatCurrency(stats.pots.Borrowed)}</p>
                   </div>
                   <div className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm text-center">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Stocks</p>
-                    <p className="font-black text-slate-700 text-sm">{formatCurrency(stats.pots.Stocks)}</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase mb-1 text-blue-400">Stocks</p>
+                    <p className="font-bold text-slate-700 text-sm">{formatCurrency(stats.pots.Stocks)}</p>
                   </div>
                   <div className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm text-center">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Bonus</p>
-                    <p className="font-black text-slate-700 text-sm">{formatCurrency(stats.pots.Bonus)}</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase mb-1 text-purple-400">Bonus</p>
+                    <p className="font-bold text-slate-700 text-sm">{formatCurrency(stats.pots.Bonus)}</p>
                   </div>
                 </div>
 
                 <div className="relative bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-7 text-white shadow-2xl shadow-slate-300 overflow-hidden">
-                  <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1 relative z-10">Total Spent This Month</p>
-                  <h2 className="text-5xl font-black tracking-tight relative z-10">{formatCurrency(stats.monthlySpend)}</h2>
-                  <div className="mt-8 pt-5 border-t border-white/10 flex gap-4 relative z-10">
+                  <div className="flex justify-between items-start mb-2 relative z-10">
+                    <div>
+                      <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Total Spent This Month</p>
+                      <h2 className="text-4xl font-black tracking-tight">{formatCurrency(stats.monthlySpend)}</h2>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-emerald-400 text-[10px] font-bold uppercase tracking-wide mb-1">Total Earned</p>
+                      <p className="font-bold text-white text-xl flex items-center justify-end gap-1">
+                        <span className="text-emerald-500 text-sm">+</span>
+                        {formatCurrency(stats.monthlyIncome)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 pt-5 border-t border-white/10 flex gap-4 relative z-10">
                     <div className="bg-white/5 flex-1 p-4 rounded-2xl border border-white/5 hover:bg-white/10 transition-colors">
                       <p className="text-[10px] text-red-300 uppercase mb-1 font-bold tracking-wide">To Pay</p>
                       <p className="font-bold text-xl">{formatCurrency(stats.owedByMe)}</p>
