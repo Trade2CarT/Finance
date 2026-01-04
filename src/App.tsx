@@ -17,8 +17,8 @@ import {
 import {
   Car, Fuel, Plus, Download, Trash2, Edit2, History, ShoppingBag,
   Home, Handshake, Gauge, LogOut, Lock, MessageCircle, ChevronDown,
-  Clock, Banknote, Settings, Briefcase,
-  PiggyBank
+  Clock, Banknote, Settings, Briefcase, Plane, TrendingUp, Landmark,
+  PiggyBank, CreditCard, Coins, Gift
 } from 'lucide-react';
 
 import type { MileageLog, ExpenseLog, LoanLog, TabView, DashboardMode, VehicleSettings, SubscriptionDetails } from './components/types';
@@ -320,7 +320,7 @@ export default function App() {
       const date = getVal('date');
       const dueDate = getVal('dueDate');
       const note = getVal('note');
-      const paymentSource = getVal('paymentSource') || null; // Where did funds come from to Lend?
+      const paymentSource = getVal('paymentSource') || null;
 
       const data = {
         loanType,
@@ -343,7 +343,7 @@ export default function App() {
       const amount = parseFloat(getVal('amount'));
       const date = getVal('date');
       const note = getVal('note');
-      const paymentSource = getVal('paymentSource') || null; // Where did I pay from?
+      const paymentSource = getVal('paymentSource') || null;
 
       const rep = {
         id: crypto.randomUUID(),
@@ -395,19 +395,19 @@ export default function App() {
     });
 
     // --- FUNDS POTS CALCULATION ---
-    const pots = { Salary: 0, Savings: 0, Bonus: 0, Stocks: 0, Borrowed: 0, Cash: 0 };
+    // FIXED: Explicitly typed as Record<string, number> to prevent TS7053 errors
+    const pots: Record<string, number> = { Salary: 0, Savings: 0, Bonus: 0, Stocks: 0, Borrowed: 0, Cash: 0 };
 
     // 1. Add Income to pots
     expenses.filter(e => e.txnType === 'income').forEach(e => {
       if (pots.hasOwnProperty(e.category)) {
-        // @ts-ignore
         pots[e.category] += e.amount;
       } else {
         pots.Cash += e.amount;
       }
     });
 
-    // 2. Add 'Borrowed' funds (When I take a loan, I have money to spend)
+    // 2. Add 'Borrowed' funds
     loans.filter(l => l.loanType === 'taken').forEach(l => {
       pots.Borrowed += l.amount;
     });
@@ -416,7 +416,6 @@ export default function App() {
     expenses.filter(e => e.txnType === 'expense').forEach(e => {
       const src = e.paymentSource || 'Salary';
       if (pots.hasOwnProperty(src)) {
-        // @ts-ignore
         pots[src] -= e.amount;
       }
     });
@@ -425,7 +424,6 @@ export default function App() {
     loans.filter(l => l.loanType === 'given').forEach(l => {
       const src = l.paymentSource || 'Salary';
       if (pots.hasOwnProperty(src)) {
-        // @ts-ignore
         pots[src] -= l.amount;
       }
     });
@@ -436,11 +434,11 @@ export default function App() {
         if (l.loanType === 'taken') {
           // I am paying back debt. Money LEAVES my pot.
           const src = r.paymentSource || 'Salary';
-          if (pots.hasOwnProperty(src)) { /*@ts-ignore*/ pots[src] -= r.amount; }
+          if (pots.hasOwnProperty(src)) { pots[src] -= r.amount; }
         } else {
           // I am receiving repayment. Money ENTERS my pot.
           const dest = r.paymentSource || 'Cash';
-          if (pots.hasOwnProperty(dest)) { /*@ts-ignore*/ pots[dest] += r.amount; }
+          if (pots.hasOwnProperty(dest)) { pots[dest] += r.amount; }
         }
       });
     });
@@ -472,7 +470,6 @@ export default function App() {
 
   const loanStatsData = [{ name: 'Owed to Me', value: stats.owedToMe, fill: '#10B981' }, { name: 'I Owe', value: stats.owedByMe, fill: '#EF4444' }];
 
-  // Prepare data for the graph, excluding income for "Spending by Category"
   const expenseOnly = expenses.filter(e => e.txnType === 'expense');
 
   return (
