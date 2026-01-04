@@ -6,7 +6,7 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db, appId } from './firebaseConfig';
-import { Wallet, Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
+import {  Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
 
 export default function Auth() {
     const [isLogin, setIsLogin] = useState(true);
