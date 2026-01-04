@@ -9,6 +9,7 @@ import {
 import type { ExpenseLog, MileageLog, LoanLog, VehicleSettings, SubscriptionDetails } from './types';
 
 // --- SHARED CONSTANTS ---
+// Added 'Others' here so it appears in Income Sources and Payment Sources
 const FUNDS_LIST = [
     { name: 'Salary', icon: <Briefcase className="w-4 h-4 text-emerald-600" /> },
     { name: 'Savings', icon: <PiggyBank className="w-4 h-4 text-pink-500" /> },
@@ -16,6 +17,7 @@ const FUNDS_LIST = [
     { name: 'Stocks', icon: <TrendingUp className="w-4 h-4 text-blue-600" /> },
     { name: 'Cash', icon: <Coins className="w-4 h-4 text-orange-500" /> },
     { name: 'Borrowed', icon: <ArrowDownLeft className="w-4 h-4 text-red-500" /> },
+    { name: 'Others', icon: <HelpCircle className="w-4 h-4 text-slate-400" /> }, // Added Others Source
 ];
 
 interface BaseModalProps {
@@ -108,6 +110,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({ onClose, onSave, edi
             { name: 'Bills', icon: <DollarSign className="w-4 h-4 text-gray-500" /> },
             { name: 'Shopping', icon: <CreditCard className="w-4 h-4 text-pink-500" /> },
             { name: 'Savings', icon: <Landmark className="w-4 h-4 text-emerald-500" /> },
+            { name: 'Others', icon: <HelpCircle className="w-4 h-4 text-slate-400" /> }, // Added Others Category
         ],
         income: FUNDS_LIST.filter(f => f.name !== 'Borrowed')
     };
@@ -212,11 +215,11 @@ export const LoanModal: React.FC<LoanModalProps> = ({ onClose, onSave, editItem,
                     <div className="grid grid-cols-2 gap-3">
                         <label className="cursor-pointer group">
                             <input type="radio" name="loanType" value="taken" checked={loanType === 'taken'} onChange={() => { setLoanType('taken'); setError(null); }} className="peer sr-only" />
-                            <div className="p-4 rounded-2xl border-2 border-slate-100 text-slate-400 peer-checked:bg-red-500 peer-checked:text-white peer-checked:border-red-500 peer-checked:shadow-lg peer-checked:shadow-red-200 transition-all flex flex-col items-center gap-2"><ArrowDownLeft className="w-6 h-6" /><span className="text-xs font-bold uppercase tracking-wider">I Borrowed</span></div>
+                            <div className="p-4 rounded-2xl border-2 border-slate-100 text-slate-400 peer-checked:bg-red-500 peer-checked:text-white peer-checked:border-red-500 peer-checked:shadow-lg transition-all flex flex-col items-center gap-2"><ArrowDownLeft className="w-6 h-6" /><span className="text-xs font-bold uppercase tracking-wider">I Borrowed</span></div>
                         </label>
                         <label className="cursor-pointer group">
                             <input type="radio" name="loanType" value="given" checked={loanType === 'given'} onChange={() => { setLoanType('given'); setError(null); }} className="peer sr-only" />
-                            <div className="p-4 rounded-2xl border-2 border-slate-100 text-slate-400 peer-checked:bg-green-500 peer-checked:text-white peer-checked:border-green-500 peer-checked:shadow-lg peer-checked:shadow-green-200 transition-all flex flex-col items-center gap-2"><ArrowUpRight className="w-6 h-6" /><span className="text-xs font-bold uppercase tracking-wider">I Lent</span></div>
+                            <div className="p-4 rounded-2xl border-2 border-slate-100 text-slate-400 peer-checked:bg-green-500 peer-checked:text-white peer-checked:border-green-500 peer-checked:shadow-lg transition-all flex flex-col items-center gap-2"><ArrowUpRight className="w-6 h-6" /><span className="text-xs font-bold uppercase tracking-wider">I Lent</span></div>
                         </label>
                     </div>
 
