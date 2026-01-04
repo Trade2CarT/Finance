@@ -16,8 +16,8 @@ import {
 } from 'firebase/firestore';
 import {
   Car, Fuel, Plus, Download, Trash2, Edit2, History, ShoppingBag,
-  Home, Handshake, Gauge, LogOut, Lock, MessageCircle, ChevronDown, Info,
-  Clock, Banknote, Settings, Crown
+  Home, Handshake, Gauge, LogOut, Lock, MessageCircle, ChevronDown,
+  Clock, Banknote, Settings
 } from 'lucide-react';
 
 import type { MileageLog, ExpenseLog, LoanLog, TabView, DashboardMode, VehicleSettings, SubscriptionDetails } from './components/types';
@@ -270,7 +270,12 @@ export default function App() {
       const date = (form.elements.namedItem('date') as HTMLInputElement).value;
       const fuelPriceEl = form.elements.namedItem('fuelPrice') as HTMLInputElement | null;
       const fuelVolumeEl = form.elements.namedItem('fuelVolume') as HTMLInputElement | null;
+
+      // Get the NEW MANDATORY fields for Fuel
       const linkedOdometerEl = form.elements.namedItem('linkedOdometer') as HTMLInputElement | null;
+      // Get Radio button value for fuelStatus
+      const fuelStatusEl = (form.elements.namedItem('fuelStatus') as RadioNodeList | null);
+      const fuelStatus = fuelStatusEl ? fuelStatusEl.value : null;
 
       const data = {
         date, category, amount, note, timestamp: Date.now(),
@@ -282,9 +287,15 @@ export default function App() {
         await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'expenses', editItem.id), data);
       } else {
         await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses'), data);
-        if (category === 'Fuel' && linkedOdometerEl?.value) {
+
+        // --- AUTO SAVE MILEAGE LOG IF CATEGORY IS FUEL ---
+        if (category === 'Fuel' && linkedOdometerEl?.value && fuelStatus) {
           await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'mileage_logs'), {
-            date, odometer: parseFloat(linkedOdometerEl.value), distance: 0, fuelStatus: 'Main', timestamp: Date.now()
+            date,
+            odometer: parseFloat(linkedOdometerEl.value),
+            distance: 0,
+            fuelStatus: fuelStatus, // NOW SAVING STATUS CORRECTLY
+            timestamp: Date.now()
           });
         }
       }
@@ -378,7 +389,7 @@ export default function App() {
   if (!user) return <Auth />;
   if (!hasAccess) return <LockedScreen onLogout={() => signOut(auth)} />;
 
-  const loanStatsData = [{ name: 'To PAY', value: stats.owedToMe, fill: '#10B981' }, { name: 'TO RECEIVE', value: stats.owedByMe, fill: '#EF4444' }];
+  const loanStatsData = [{ name: 'Owed to Me', value: stats.owedToMe, fill: '#10B981' }, { name: 'I Owe', value: stats.owedByMe, fill: '#EF4444' }];
 
   return (
     <div className="min-h-screen bg-slate-50/80 pb-28 font-sans text-slate-800">
@@ -419,10 +430,15 @@ export default function App() {
               <>
                 <div className="relative bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-7 text-white shadow-2xl shadow-slate-300 overflow-hidden">
                   {/* --- BRANDED WATERMARK --- */}
-                  <img src="/logo.PNG" alt="Watermark" className="absolute top-[-20px] right-[-20px] w-40 h-40 opacity-[0.07] rotate-12 pointer-events-none grayscale" />
-                  <div className="absolute top-5 right-5 w-10 h-10 rounded-xl bg-white/10 backdrop-blur-md p-1.5 flex items-center justify-center border border-white/20 shadow-lg">
-                    <img src="/logo.PNG" alt="Icon" className="w-full h-full object-contain opacity-90" />
-                  </div>
+                  {/* <div className="absolute top-5 right-5 w-10 h-10 rounded-xl bg-white/10 backdrop-blur-md p-1.5
+                flex items-center justify-center border border-white/20 shadow-lg">
+                    <img
+                      src="/logo.PNG"
+                      alt="Icon"
+                      className="w-full h-full object-contain invert brightness-0 opacity-90"
+                    />
+                  </div> */}
+
 
                   <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1 relative z-10">Total Spent This Month</p>
                   <h2 className="text-5xl font-black tracking-tight relative z-10">{formatCurrency(stats.monthlySpend)}</h2>
@@ -507,7 +523,6 @@ export default function App() {
                   <p className="text-xs font-bold text-slate-400 mb-3 ml-2 uppercase tracking-wide">{date}</p>
                   <div className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm">
                     {items.map((item: any) => {
-                      // ... (Item rendering logic remains same but container styles improved by parent class)
                       if (item.type === 'expense') {
                         return (
                           <div key={item.id} className="p-5 border-b border-slate-50 last:border-0 flex justify-between group hover:bg-slate-50 transition-colors">
@@ -525,7 +540,6 @@ export default function App() {
                           </div>
                         );
                       } else if (item.type === 'loan') {
-                        // Same logic, just ensuring classes match new style
                         const l = item as LoanLog;
                         const totalPaid = (l.repayments || []).reduce((sum, r) => sum + r.amount, 0);
                         const balance = l.amount - totalPaid;
@@ -581,6 +595,7 @@ export default function App() {
                                 <div className="flex items-center gap-2">
                                   <p className="font-bold text-sm text-slate-700">{m.odometer.toLocaleString()} km</p>
                                   {m.fuelStatus === 'Main' && <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded border border-blue-200">MAIN</span>}
+                                  {m.fuelStatus === 'Reserve' && <span className="text-[10px] font-bold bg-orange-100 text-orange-600 px-2 py-0.5 rounded border border-orange-200">RESERVE</span>}
                                 </div>
                                 <p className="text-xs text-slate-400 font-medium">Odometer Update</p>
                               </div>
