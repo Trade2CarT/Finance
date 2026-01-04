@@ -17,7 +17,8 @@ import {
 import {
   Car, Fuel, Plus, Download, Trash2, Edit2, History, ShoppingBag,
   Home, Handshake, Gauge, LogOut, Lock, MessageCircle, ChevronDown,
-  Clock, Banknote, Settings
+  Clock, Banknote, Settings, Briefcase,
+  PiggyBank
 } from 'lucide-react';
 
 import type { MileageLog, ExpenseLog, LoanLog, TabView, DashboardMode, VehicleSettings, SubscriptionDetails } from './components/types';
@@ -230,7 +231,11 @@ export default function App() {
     });
 
     const unsubExpenses = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses'), (snap) => {
-      setExpenses(snap.docs.map(d => ({ id: d.id, type: 'expense', ...d.data() } as ExpenseLog)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+      setExpenses(snap.docs.map(d => {
+        const data = d.data();
+        const txnType = data.txnType || 'expense';
+        return { id: d.id, type: 'expense', ...data, txnType } as ExpenseLog;
+      }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     });
 
     const unsubLoans = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'loans'), (snap) => {
@@ -249,7 +254,6 @@ export default function App() {
     if (!user) return;
     const form = e.target as HTMLFormElement;
 
-    // Helper to safely get value from named item, defaulting to null or empty string
     const getVal = (name: string) => {
       const el = form.elements.namedItem(name);
       return (el as HTMLInputElement | null)?.value || '';
@@ -278,6 +282,8 @@ export default function App() {
       const category = getVal('category');
       const note = getVal('note');
       const date = getVal('date');
+      const txnType = getVal('txnType') || 'expense';
+      const paymentSource = getVal('paymentSource') || null;
 
       const fuelPriceVal = getVal('fuelPrice');
       const fuelVolumeVal = getVal('fuelVolume');
@@ -285,7 +291,7 @@ export default function App() {
       const fuelStatus = getVal('fuelStatus') || null;
 
       const data = {
-        date, category, amount, note, timestamp: Date.now(),
+        date, category, amount, note, txnType, paymentSource, timestamp: Date.now(),
         fuelPrice: fuelPriceVal ? parseFloat(fuelPriceVal) : null,
         fuelVolume: fuelVolumeVal ? parseFloat(fuelVolumeVal) : null,
       };
@@ -313,7 +319,8 @@ export default function App() {
       const person = getVal('person');
       const date = getVal('date');
       const dueDate = getVal('dueDate');
-      const note = getVal('note'); // Safe even if field is missing
+      const note = getVal('note');
+      const paymentSource = getVal('paymentSource') || null; // Where did funds come from to Lend?
 
       const data = {
         loanType,
@@ -322,6 +329,7 @@ export default function App() {
         date,
         dueDate,
         note,
+        paymentSource,
         repayments: editItem?.repayments || []
       };
       if (editItem) {
@@ -335,12 +343,14 @@ export default function App() {
       const amount = parseFloat(getVal('amount'));
       const date = getVal('date');
       const note = getVal('note');
+      const paymentSource = getVal('paymentSource') || null; // Where did I pay from?
 
       const rep = {
         id: crypto.randomUUID(),
         amount,
         date,
-        note
+        note,
+        paymentSource
       };
       await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'loans', selectedLoan.id), {
         repayments: [...selectedLoan.repayments, rep]
@@ -354,9 +364,9 @@ export default function App() {
   };
 
   const exportCSV = () => {
-    let csv = "Type,Date,Details,Amount,Status\n";
-    expenses.forEach(e => csv += `Expense,${e.date},${e.category} - ${e.note},${e.amount},Completed\n`);
-    loans.forEach(l => csv += `Loan,${l.date},${l.loanType} ${l.person},${l.amount},${(l.repayments || []).reduce((s, r) => s + r.amount, 0) >= l.amount ? 'Settled' : 'Open'}\n`);
+    let csv = "Type,Date,Category,Source,Amount,Details\n";
+    expenses.forEach(e => csv += `${e.txnType === 'income' ? 'Income' : 'Expense'},${e.date},${e.category},${e.paymentSource || '-'},${e.amount},${e.note}\n`);
+    loans.forEach(l => csv += `Loan,${l.date},${l.loanType},${l.paymentSource || '-'},${l.amount},${l.person} (${(l.repayments || []).reduce((s, r) => s + r.amount, 0) >= l.amount ? 'Settled' : 'Open'})\n`);
     const link = document.createElement("a");
     link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     link.download = "trade2cart_finance.csv";
@@ -369,14 +379,14 @@ export default function App() {
     const initialOdometer = sortedLogs.length > 0 ? sortedLogs[sortedLogs.length - 1].odometer : 0;
     const totalDistance = currentOdometer - initialOdometer;
 
-    const vehicleExpenses = expenses.filter(e => ['Fuel', 'Maintenance', 'Service', 'Insurance', 'Toll'].includes(e.category)).reduce((acc, log) => acc + log.amount, 0);
+    const vehicleExpenses = expenses.filter(e => ['Fuel', 'Maintenance', 'Service', 'Insurance', 'Toll'].includes(e.category) && e.txnType === 'expense').reduce((acc, log) => acc + log.amount, 0);
     const totalFuelVolume = expenses.filter(e => e.category === 'Fuel' && e.fuelVolume).reduce((acc, log) => acc + (log.fuelVolume || 0), 0);
 
     const costPerKm = totalDistance > 0 ? (vehicleExpenses / totalDistance).toFixed(2) : '---';
     const averageMileage = totalFuelVolume > 0 && totalDistance > 0 ? (totalDistance / totalFuelVolume).toFixed(1) : '---';
 
     const currentMonth = new Date().toISOString().slice(0, 7);
-    const monthlySpend = expenses.filter(e => e.date.startsWith(currentMonth)).reduce((acc, log) => acc + log.amount, 0);
+    const monthlySpend = expenses.filter(e => e.date.startsWith(currentMonth) && e.txnType === 'expense').reduce((acc, log) => acc + log.amount, 0);
 
     let owedByMe = 0; let owedToMe = 0;
     loans.forEach(l => {
@@ -384,8 +394,60 @@ export default function App() {
       if (balance > 0) l.loanType === 'taken' ? owedByMe += balance : owedToMe += balance;
     });
 
+    // --- FUNDS POTS CALCULATION ---
+    const pots = { Salary: 0, Savings: 0, Bonus: 0, Stocks: 0, Borrowed: 0, Cash: 0 };
+
+    // 1. Add Income to pots
+    expenses.filter(e => e.txnType === 'income').forEach(e => {
+      if (pots.hasOwnProperty(e.category)) {
+        // @ts-ignore
+        pots[e.category] += e.amount;
+      } else {
+        pots.Cash += e.amount;
+      }
+    });
+
+    // 2. Add 'Borrowed' funds (When I take a loan, I have money to spend)
+    loans.filter(l => l.loanType === 'taken').forEach(l => {
+      pots.Borrowed += l.amount;
+    });
+
+    // 3. Deduct Expenses (Spent from specific pots)
+    expenses.filter(e => e.txnType === 'expense').forEach(e => {
+      const src = e.paymentSource || 'Salary';
+      if (pots.hasOwnProperty(src)) {
+        // @ts-ignore
+        pots[src] -= e.amount;
+      }
+    });
+
+    // 4. Deduct Money Lent to Others (When I lend money, it leaves my pot)
+    loans.filter(l => l.loanType === 'given').forEach(l => {
+      const src = l.paymentSource || 'Salary';
+      if (pots.hasOwnProperty(src)) {
+        // @ts-ignore
+        pots[src] -= l.amount;
+      }
+    });
+
+    // 5. Handle Repayments
+    loans.forEach(l => {
+      (l.repayments || []).forEach(r => {
+        if (l.loanType === 'taken') {
+          // I am paying back debt. Money LEAVES my pot.
+          const src = r.paymentSource || 'Salary';
+          if (pots.hasOwnProperty(src)) { /*@ts-ignore*/ pots[src] -= r.amount; }
+        } else {
+          // I am receiving repayment. Money ENTERS my pot.
+          const dest = r.paymentSource || 'Cash';
+          if (pots.hasOwnProperty(dest)) { /*@ts-ignore*/ pots[dest] += r.amount; }
+        }
+      });
+    });
+
     return {
-      currentOdometer, totalDistance, vehicleExpenses, costPerKm, averageMileage, monthlySpend, owedByMe, owedToMe, netBalance: owedToMe - owedByMe,
+      currentOdometer, totalDistance, vehicleExpenses, costPerKm, averageMileage, monthlySpend, owedByMe, owedToMe,
+      pots,
       needsMoreData: mileageLogs.length === 1
     };
   }, [mileageLogs, expenses, loans]);
@@ -409,6 +471,9 @@ export default function App() {
   if (!hasAccess) return <LockedScreen onLogout={() => signOut(auth)} />;
 
   const loanStatsData = [{ name: 'Owed to Me', value: stats.owedToMe, fill: '#10B981' }, { name: 'I Owe', value: stats.owedByMe, fill: '#EF4444' }];
+
+  // Prepare data for the graph, excluding income for "Spending by Category"
+  const expenseOnly = expenses.filter(e => e.txnType === 'expense');
 
   return (
     <div className="min-h-screen bg-slate-50/80 pb-28 font-sans text-slate-800">
@@ -447,10 +512,37 @@ export default function App() {
 
             {dashMode === 'wallet' ? (
               <>
+                {/* Available Funds Grid */}
+                <div className="grid grid-cols-2 gap-3 mb-2">
+                  <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                    <div className="bg-emerald-50 w-8 h-8 rounded-full flex items-center justify-center text-emerald-600 mb-2"><Briefcase className="w-4 h-4" /></div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Salary</p>
+                    <p className="text-lg font-black text-slate-800">{formatCurrency(stats.pots.Salary)}</p>
+                  </div>
+                  <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                    <div className="bg-pink-50 w-8 h-8 rounded-full flex items-center justify-center text-pink-600 mb-2"><PiggyBank className="w-4 h-4" /></div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Savings</p>
+                    <p className="text-lg font-black text-slate-800">{formatCurrency(stats.pots.Savings)}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3 mb-6">
+                  <div className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm text-center">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Borrowed</p>
+                    <p className="font-black text-slate-700 text-sm">{formatCurrency(stats.pots.Borrowed)}</p>
+                  </div>
+                  <div className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm text-center">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Stocks</p>
+                    <p className="font-black text-slate-700 text-sm">{formatCurrency(stats.pots.Stocks)}</p>
+                  </div>
+                  <div className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm text-center">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Bonus</p>
+                    <p className="font-black text-slate-700 text-sm">{formatCurrency(stats.pots.Bonus)}</p>
+                  </div>
+                </div>
+
                 <div className="relative bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-7 text-white shadow-2xl shadow-slate-300 overflow-hidden">
                   <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1 relative z-10">Total Spent This Month</p>
                   <h2 className="text-5xl font-black tracking-tight relative z-10">{formatCurrency(stats.monthlySpend)}</h2>
-
                   <div className="mt-8 pt-5 border-t border-white/10 flex gap-4 relative z-10">
                     <div className="bg-white/5 flex-1 p-4 rounded-2xl border border-white/5 hover:bg-white/10 transition-colors">
                       <p className="text-[10px] text-red-300 uppercase mb-1 font-bold tracking-wide">To Pay</p>
@@ -463,24 +555,27 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="bg-white rounded-3xl border border-slate-100 shadow-sm divide-y divide-slate-50 overflow-hidden">
+                <div className="bg-white rounded-3xl border border-slate-100 shadow-sm divide-y divide-slate-50 overflow-hidden mt-6">
                   {expenses.slice(0, 3).map(e => (
                     <div key={e.id} className="p-5 flex justify-between items-center hover:bg-slate-50/50 transition-colors">
                       <div className="flex items-center gap-4">
-                        <div className={`p-3 rounded-2xl ${['Fuel', 'Service'].includes(e.category) ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                          {['Fuel', 'Service'].includes(e.category) ? <Car className="w-5 h-5" /> : <ShoppingBag className="w-5 h-5" />}
+                        <div className={`p-3 rounded-2xl ${e.txnType === 'income' ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600'}`}>
+                          {e.txnType === 'income' ? <Banknote className="w-5 h-5" /> : <ShoppingBag className="w-5 h-5" />}
                         </div>
                         <div>
                           <p className="font-bold text-sm text-slate-800">{e.category}</p>
                           <p className="text-xs text-slate-400 font-medium mt-0.5">{formatDate(e.date)}</p>
                         </div>
                       </div>
-                      <span className="font-black text-slate-700">{formatCurrency(e.amount)}</span>
+                      <span className={`font-black ${e.txnType === 'income' ? 'text-emerald-600' : 'text-slate-700'}`}>
+                        {e.txnType === 'income' ? '+' : ''}{formatCurrency(e.amount)}
+                      </span>
                     </div>
                   ))}
                 </div>
               </>
             ) : (
+              // Vehicle View (Unchanged)
               <>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
@@ -496,15 +591,10 @@ export default function App() {
                     <p className="text-[10px] text-slate-400 font-medium">km/L</p>
                   </div>
                 </div>
-
-                <div className="bg-blue-600 rounded-3xl p-7 text-white shadow-xl shadow-blue-200 relative overflow-hidden">
+                <div className="bg-blue-600 rounded-3xl p-7 text-white shadow-xl shadow-blue-200 relative overflow-hidden mt-6">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl pointer-events-none -mr-10 -mt-10"></div>
-
                   <div className="flex justify-between items-start relative z-10">
-                    <div>
-                      <p className="text-blue-200 text-xs font-bold uppercase tracking-widest">Vehicle Spending</p>
-                      <h2 className="text-4xl font-black mt-2">{formatCurrency(stats.vehicleExpenses)}</h2>
-                    </div>
+                    <div><p className="text-blue-200 text-xs font-bold uppercase tracking-widest">Vehicle Spending</p><h2 className="text-4xl font-black mt-2">{formatCurrency(stats.vehicleExpenses)}</h2></div>
                     <Fuel className="w-10 h-10 text-blue-200 opacity-80" />
                   </div>
                   <div className="mt-6 flex gap-6 text-xs text-blue-100 border-t border-blue-500/50 pt-5 relative z-10">
@@ -535,11 +625,20 @@ export default function App() {
                         return (
                           <div key={item.id} className="p-5 border-b border-slate-50 last:border-0 flex justify-between group hover:bg-slate-50 transition-colors">
                             <div className="flex gap-4">
-                              <div className={`w-1.5 h-10 rounded-full ${item.category === 'Fuel' ? 'bg-blue-500' : 'bg-emerald-500'}`}></div>
-                              <div><p className="font-bold text-sm text-slate-800">{item.category}</p><p className="text-xs text-slate-400 font-medium">{item.note}</p></div>
+                              <div className={`w-1.5 h-10 rounded-full ${item.txnType === 'income' ? 'bg-emerald-500' : 'bg-orange-500'}`}></div>
+                              <div>
+                                <p className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                                  {item.category}
+                                  {item.txnType === 'income' && <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold uppercase">Income</span>}
+                                  {item.txnType === 'expense' && <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-bold uppercase">via {item.paymentSource || 'Salary'}</span>}
+                                </p>
+                                <p className="text-xs text-slate-400 font-medium">{item.note}</p>
+                              </div>
                             </div>
                             <div className="text-right">
-                              <p className="font-black text-slate-800">{formatCurrency(item.amount)}</p>
+                              <p className={`font-black ${item.txnType === 'income' ? 'text-emerald-600' : 'text-slate-800'}`}>
+                                {item.txnType === 'income' ? '+' : ''}{formatCurrency(item.amount)}
+                              </p>
                               <div className="flex justify-end gap-3 mt-1 ">
                                 <button onClick={() => { setEditItem(item); setModalType('expense'); }}><Edit2 className="w-3.5 h-3.5 text-blue-500 hover:scale-110 transition-transform" /></button>
                                 <button onClick={() => deleteItem('expenses', item.id)}><Trash2 className="w-3.5 h-3.5 text-red-500 hover:scale-110 transition-transform" /></button>
@@ -551,7 +650,6 @@ export default function App() {
                         const l = item as LoanLog;
                         const totalPaid = (l.repayments || []).reduce((sum, r) => sum + r.amount, 0);
                         const balance = l.amount - totalPaid;
-                        const progress = Math.min(100, (totalPaid / l.amount) * 100);
                         const isPaid = balance <= 0;
                         return (
                           <div key={l.id} className={`p-5 border-b border-slate-50 last:border-0 flex flex-col gap-4 group ${isPaid ? 'opacity-60 bg-slate-50' : 'bg-white hover:bg-slate-50'} transition-colors`}>
@@ -579,7 +677,7 @@ export default function App() {
                             </div>
 
                             <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                              <div className={`h-full rounded-full transition-all duration-700 ease-out ${isPaid ? 'bg-green-400' : 'bg-blue-500'}`} style={{ width: `${progress}%` }}></div>
+                              <div className={`h-full rounded-full transition-all duration-700 ease-out ${isPaid ? 'bg-green-400' : 'bg-blue-500'}`} style={{ width: `${Math.min(100, (totalPaid / l.amount) * 100)}%` }}></div>
                             </div>
 
                             {!isPaid && (
@@ -632,7 +730,7 @@ export default function App() {
         {activeTab === 'analytics' && (
           <div className="space-y-6 animate-in fade-in duration-300">
             <Suspense fallback={<div className="h-80 bg-slate-100 rounded-3xl animate-pulse"></div>}>
-              <Recharts data={loanStatsData} expenses={expenses} />
+              <Recharts data={loanStatsData} expenses={expenseOnly} />
             </Suspense>
           </div>
         )}
@@ -643,7 +741,7 @@ export default function App() {
         {isFabOpen && (
           <div className="pointer-events-auto flex flex-col items-end gap-3 animate-in slide-in-from-bottom-10 fade-in duration-200 pb-2">
             <button onClick={() => { setModalType('loan'); setIsFabOpen(false) }} className="flex items-center gap-3 bg-slate-800 text-white pl-5 pr-2 py-2.5 rounded-full shadow-xl hover:scale-105 transition-transform"><span className="font-bold text-sm">Loan / Debt</span><div className="bg-white/20 p-1.5 rounded-full"><Handshake className="w-4 h-4" /></div></button>
-            <button onClick={() => { setModalType('expense'); setIsFabOpen(false) }} className="flex items-center gap-3 bg-emerald-600 text-white pl-5 pr-2 py-2.5 rounded-full shadow-xl hover:scale-105 transition-transform"><span className="font-bold text-sm">Expense</span><div className="bg-white/20 p-1.5 rounded-full"><ShoppingBag className="w-4 h-4" /></div></button>
+            <button onClick={() => { setModalType('expense'); setIsFabOpen(false) }} className="flex items-center gap-3 bg-emerald-600 text-white pl-5 pr-2 py-2.5 rounded-full shadow-xl hover:scale-105 transition-transform"><span className="font-bold text-sm">Transaction</span><div className="bg-white/20 p-1.5 rounded-full"><ShoppingBag className="w-4 h-4" /></div></button>
             <button onClick={() => { setModalType('mileage'); setIsFabOpen(false) }} className="flex items-center gap-3 bg-blue-600 text-white pl-5 pr-2 py-2.5 rounded-full shadow-xl hover:scale-105 transition-transform"><span className="font-bold text-sm">Odometer</span><div className="bg-white/20 p-1.5 rounded-full"><Car className="w-4 h-4" /></div></button>
           </div>
         )}
@@ -676,10 +774,10 @@ export default function App() {
       </nav>
 
       {/* MODALS */}
-      {modalType === 'expense' && <ExpenseModal onClose={() => setModalType(null)} onSave={(e) => handleSave(e, 'expense')} editItem={editItem} currentOdometer={stats.currentOdometer} />}
+      {modalType === 'expense' && <ExpenseModal onClose={() => setModalType(null)} onSave={(e) => handleSave(e, 'expense')} editItem={editItem} currentOdometer={stats.currentOdometer} pots={stats.pots} />}
       {modalType === 'mileage' && <MileageModal onClose={() => setModalType(null)} onSave={(e) => handleSave(e, 'mileage')} editItem={editItem} currentOdometer={stats.currentOdometer} />}
-      {modalType === 'loan' && <LoanModal onClose={() => setModalType(null)} onSave={(e) => handleSave(e, 'loan')} editItem={editItem} />}
-      {modalType === 'repayment' && <RepaymentModal onClose={() => setModalType(null)} onSave={(e) => handleSave(e, 'repayment')} selectedLoan={selectedLoan} />}
+      {modalType === 'loan' && <LoanModal onClose={() => setModalType(null)} onSave={(e) => handleSave(e, 'loan')} editItem={editItem} pots={stats.pots} />}
+      {modalType === 'repayment' && <RepaymentModal onClose={() => setModalType(null)} onSave={(e) => handleSave(e, 'repayment')} selectedLoan={selectedLoan} pots={stats.pots} />}
       {modalType === 'settings' && <SettingsModal onClose={() => setModalType(null)} onSave={(e) => handleSave(e, 'settings')} settings={vehicleSettings} subDetails={subDetails} />}
     </div>
   );

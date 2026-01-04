@@ -1,129 +1,164 @@
 // src/components/Modals.tsx
-import React, { useState, useEffect } from 'react';
-import { Fuel, X, Crown, Mail, MessageCircle, HelpCircle, Check, ShieldCheck, ChevronRight, Gauge, Zap, Droplet, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+    Fuel, X, Crown, Mail, MessageCircle, HelpCircle, Check, ShieldCheck,
+    Gauge, Zap, Droplet, ArrowDownLeft, ArrowUpRight, Plane, Wallet,
+    Briefcase, TrendingUp, DollarSign, Gift, ChevronDown, Landmark,
+    CreditCard, Coins, PiggyBank, AlertTriangle
+} from 'lucide-react';
 import type { ExpenseLog, MileageLog, LoanLog, VehicleSettings, SubscriptionDetails } from './types';
+
+// --- SHARED CONSTANTS ---
+const FUNDS_LIST = [
+    { name: 'Salary', icon: <Briefcase className="w-4 h-4 text-emerald-600" /> },
+    { name: 'Savings', icon: <PiggyBank className="w-4 h-4 text-pink-500" /> },
+    { name: 'Bonus', icon: <Gift className="w-4 h-4 text-purple-500" /> },
+    { name: 'Stocks', icon: <TrendingUp className="w-4 h-4 text-blue-600" /> },
+    { name: 'Cash', icon: <Coins className="w-4 h-4 text-orange-500" /> },
+    { name: 'Borrowed', icon: <ArrowDownLeft className="w-4 h-4 text-red-500" /> },
+];
 
 interface BaseModalProps {
     onClose: () => void;
     onSave: (e: React.FormEvent) => void;
 }
 
+// Helper for Dropdowns
+const CustomDropdown = ({ label, value, onChange, options, error }: any) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        const handleClick = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false); };
+        document.addEventListener('mousedown', handleClick); return () => document.removeEventListener('mousedown', handleClick);
+    }, []);
+    const currentIcon = options.find((o: any) => o.name === value)?.icon || <Wallet className="w-4 h-4" />;
+
+    return (
+        <div className="relative" ref={ref}>
+            <label className="text-sm font-bold text-slate-700 ml-1 mb-1.5 block">{label}</label>
+            <button type="button" onClick={() => setIsOpen(!isOpen)} className={`w-full p-4 bg-slate-50 rounded-2xl border outline-none font-bold flex items-center justify-between transition-all ${error ? 'border-red-300 ring-2 ring-red-100' : 'border-slate-100 focus:ring-4 focus:ring-blue-50'}`}>
+                <div className="flex items-center gap-3"><div className="bg-white p-2 rounded-xl shadow-sm border border-slate-100">{currentIcon}</div><span className="text-slate-700">{value}</span></div>
+                <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {error && <p className="text-xs text-red-500 font-bold mt-1.5 ml-1 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> {error}</p>}
+            {isOpen && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-slate-100 z-50 max-h-60 overflow-y-auto p-2">
+                    <div className="grid grid-cols-2 gap-2">
+                        {options.map((o: any) => (
+                            <button key={o.name} type="button" onClick={() => { onChange(o.name); setIsOpen(false); }} className={`flex items-center gap-2 p-3 rounded-xl text-sm font-bold transition-all ${value === o.name ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}>
+                                {o.icon} {o.name}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 interface ExpenseModalProps extends BaseModalProps {
     editItem: ExpenseLog | null;
     currentOdometer: number;
+    pots: Record<string, number>;
 }
 
-export const ExpenseModal: React.FC<ExpenseModalProps> = ({ onClose, onSave, editItem, currentOdometer }) => {
-    const [cat, setCat] = useState(editItem?.category || 'Groceries');
+export const ExpenseModal: React.FC<ExpenseModalProps> = ({ onClose, onSave, editItem, currentOdometer, pots }) => {
+    const [txnType, setTxnType] = useState<'expense' | 'income'>(editItem?.txnType || 'expense');
+    const [cat, setCat] = useState(editItem?.category || (txnType === 'expense' ? 'Groceries' : 'Salary'));
+    const [source, setSource] = useState(editItem?.paymentSource || 'Salary');
+    const [amt, setAmt] = useState(editItem?.amount?.toString() || '');
+    const [error, setError] = useState<string | null>(null);
+
+    // Fuel specific
     const [price, setPrice] = useState(editItem?.fuelPrice?.toString() || '');
     const [vol, setVol] = useState(editItem?.fuelVolume?.toString() || '');
-    const [amt, setAmt] = useState(editItem?.amount?.toString() || '');
 
-    // Auto-calculate liters
     useEffect(() => {
-        if (cat === 'Fuel' && price && amt) {
-            const p = parseFloat(price);
-            const a = parseFloat(amt);
-            if (p > 0) setVol((a / p).toFixed(2));
+        const isCurrentExpense = CATEGORIES.expense.some(c => c.name === cat);
+        if (txnType === 'expense' && !isCurrentExpense) setCat('Groceries');
+        if (txnType === 'income') setCat('Salary');
+        setError(null);
+    }, [txnType]);
+
+    useEffect(() => { if (cat === 'Fuel' && price && amt) setVol((parseFloat(amt) / parseFloat(price)).toFixed(2)); }, [price, amt, cat]);
+
+    const handleFormSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        const amount = parseFloat(amt);
+        if (txnType === 'expense') {
+            const currentBalance = pots[source] || 0;
+            if (amount > currentBalance) {
+                setError(`Insufficient funds in ${source}. Available: ₹${currentBalance}`);
+                return;
+            }
         }
-    }, [price, amt, cat]);
+        onSave(e);
+    };
+
+    const CATEGORIES = {
+        expense: [
+            { name: 'Groceries', icon: <Wallet className="w-4 h-4 text-orange-500" /> },
+            { name: 'Fuel', icon: <Fuel className="w-4 h-4 text-blue-500" /> },
+            { name: 'Travels', icon: <Plane className="w-4 h-4 text-sky-500" /> },
+            { name: 'Dining Out', icon: <DollarSign className="w-4 h-4 text-red-500" /> },
+            { name: 'Maintenance', icon: <Gauge className="w-4 h-4 text-slate-500" /> },
+            { name: 'Service', icon: <Zap className="w-4 h-4 text-yellow-500" /> },
+            { name: 'Insurance', icon: <ShieldCheck className="w-4 h-4 text-indigo-500" /> },
+            { name: 'Rent', icon: <Wallet className="w-4 h-4 text-purple-500" /> },
+            { name: 'Bills', icon: <DollarSign className="w-4 h-4 text-gray-500" /> },
+            { name: 'Shopping', icon: <CreditCard className="w-4 h-4 text-pink-500" /> },
+            { name: 'Savings', icon: <Landmark className="w-4 h-4 text-emerald-500" /> },
+        ],
+        income: FUNDS_LIST.filter(f => f.name !== 'Borrowed')
+    };
 
     return (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 animate-in fade-in duration-200">
             <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-8 max-h-[90vh] overflow-y-auto ring-1 ring-white/50">
                 <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-xl font-bold text-slate-800 tracking-tight">{editItem ? 'Edit Expense' : 'Add Expense'}</h3>
+                    <h3 className="text-xl font-bold text-slate-800 tracking-tight">{editItem ? 'Edit Transaction' : 'New Transaction'}</h3>
                     <button onClick={onClose} type="button" className="bg-slate-50 p-2 rounded-full hover:bg-slate-100 transition-colors"><X className="w-5 h-5 text-slate-500" /></button>
                 </div>
-                <form onSubmit={onSave} className="space-y-6">
+
+                <form onSubmit={handleFormSubmit} className="space-y-6">
+                    <input type="hidden" name="category" value={cat} />
+                    <input type="hidden" name="paymentSource" value={source} />
+                    <input type="hidden" name="txnType" value={txnType} />
+
+                    <div className="bg-slate-100 p-1 rounded-2xl flex relative">
+                        <button type="button" onClick={() => setTxnType('expense')} className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all relative z-10 ${txnType === 'expense' ? 'text-slate-900 shadow-sm bg-white' : 'text-slate-400 hover:text-slate-600'}`}>Expense</button>
+                        <button type="button" onClick={() => setTxnType('income')} className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all relative z-10 ${txnType === 'income' ? 'text-emerald-700 shadow-sm bg-white' : 'text-slate-400 hover:text-slate-600'}`}>Income</button>
+                    </div>
+
                     <div className="text-center py-2 relative">
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Total Amount</label>
-                        <div className="flex items-center justify-center text-5xl font-black text-slate-800 mt-2">
+                        <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">{txnType === 'income' ? 'Amount Received' : 'Total Spent'}</label>
+                        <div className={`flex items-center justify-center text-5xl font-black mt-2 ${txnType === 'income' ? 'text-emerald-600' : 'text-slate-800'}`}>
                             <span className="text-slate-300 text-3xl mr-2 font-medium">₹</span>
-                            <input name="amount" type="number" step="0.01" required placeholder="0" value={amt} onChange={e => setAmt(e.target.value)} className="w-48 text-center bg-transparent outline-none placeholder:text-slate-200" />
+                            <input name="amount" type="number" step="0.01" required placeholder="0" value={amt} onChange={e => { setAmt(e.target.value); setError(null); }} className="w-48 text-center bg-transparent outline-none placeholder:text-slate-200" />
                         </div>
                     </div>
 
                     <div className="space-y-4">
-                        <div>
-                            <label className="text-sm font-bold text-slate-700 ml-1">Category</label>
-                            <div className="relative mt-1.5">
-                                <select name="category" value={cat} onChange={e => setCat(e.target.value)} className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-100 outline-none text-slate-700 font-bold appearance-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50 transition-all">
-                                    <optgroup label="Daily Essentials">
-                                        <option>Groceries</option>
-                                        <option>Vegetables/Fruits</option>
-                                        <option>Milk & Dairy</option>
-                                        <option>Dining Out</option>
-                                    </optgroup>
-                                    <optgroup label="Vehicle">
-                                        <option>Fuel</option>
-                                        <option>Maintenance</option>
-                                        <option>Service</option>
-                                        <option>Insurance</option>
-                                        <option>Toll</option>
-                                    </optgroup>
-                                    <optgroup label="Home & Bills">
-                                        <option>Rent</option>
-                                        <option>EMI</option>
-                                        <option>Bills (Elec/Water)</option>
-                                        <option>Medical</option>
-                                        <option>Shopping</option>
-                                        <option>Other</option>
-                                    </optgroup>
-                                </select>
-                                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400"><ChevronRight className="w-5 h-5 rotate-90" /></div>
-                            </div>
-                        </div>
+                        <CustomDropdown label="Category" value={cat} onChange={setCat} options={CATEGORIES[txnType]} />
 
-                        {cat === 'Fuel' && (
+                        {txnType === 'expense' && (
+                            <CustomDropdown
+                                label="Pay From (Source)"
+                                value={source}
+                                onChange={(val: string) => { setSource(val); setError(null); }}
+                                options={FUNDS_LIST}
+                                error={error}
+                            />
+                        )}
+
+                        {cat === 'Fuel' && txnType === 'expense' && (
                             <div className="bg-blue-50/50 p-5 rounded-2xl border border-blue-100 space-y-4 animate-in slide-in-from-top-2">
-                                <div className="flex items-center gap-2 text-blue-700 font-bold border-b border-blue-100 pb-2">
-                                    <Fuel className="w-4 h-4" /> Fuel Log (Required)
-                                </div>
-
-                                {/* 1. Odometer (MANDATORY) */}
-                                <div>
-                                    <label className="text-xs text-blue-600 font-bold block mb-1.5 flex items-center gap-1">
-                                        <Gauge className="w-3 h-3" /> Current Odometer
-                                    </label>
-                                    <input
-                                        name="linkedOdometer"
-                                        type="number"
-                                        required
-                                        placeholder={currentOdometer ? `${currentOdometer} (Previous)` : "e.g. 12500"}
-                                        className="w-full p-3 rounded-xl border border-blue-200 bg-white outline-none font-bold text-slate-700 text-lg focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
-                                    />
-                                </div>
-
-                                {/* 2. Fuel Status (MANDATORY) */}
-                                <div>
-                                    <label className="text-xs text-blue-600 font-bold block mb-2">Current Bike Status</label>
-                                    <div className="flex gap-3">
-                                        <label className="flex-1 cursor-pointer group">
-                                            <input type="radio" name="fuelStatus" value="Main" required className="peer sr-only" />
-                                            <div className="p-3 text-center rounded-xl border-2 border-blue-100 bg-white text-slate-400 peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 peer-checked:shadow-lg transition-all font-bold text-sm flex items-center justify-center gap-2">
-                                                <Zap className="w-4 h-4" /> Main
-                                            </div>
-                                        </label>
-                                        <label className="flex-1 cursor-pointer group">
-                                            <input type="radio" name="fuelStatus" value="Reserve" required className="peer sr-only" />
-                                            <div className="p-3 text-center rounded-xl border-2 border-blue-100 bg-white text-slate-400 peer-checked:bg-orange-500 peer-checked:text-white peer-checked:border-orange-500 peer-checked:shadow-lg transition-all font-bold text-sm flex items-center justify-center gap-2">
-                                                <Droplet className="w-4 h-4" /> Reserve
-                                            </div>
-                                        </label>
-                                    </div>
-                                </div>
-
-                                {/* 3. Price & Liters */}
+                                <div className="flex items-center gap-2 text-blue-700 font-bold border-b border-blue-100 pb-2"><Fuel className="w-4 h-4" /> Fuel Log (Required)</div>
+                                <div><label className="text-xs text-blue-600 font-bold block mb-1.5 flex items-center gap-1"><Gauge className="w-3 h-3" /> Current Odometer</label><input name="linkedOdometer" type="number" required placeholder={currentOdometer ? `${currentOdometer} (Previous)` : "e.g. 12500"} className="w-full p-3 rounded-xl border border-blue-200 bg-white outline-none font-bold text-slate-700 text-lg" /></div>
+                                <div><label className="text-xs text-blue-600 font-bold block mb-2">Current Bike Status</label><div className="flex gap-3"><label className="flex-1 cursor-pointer group"><input type="radio" name="fuelStatus" value="Main" required className="peer sr-only" /><div className="p-3 text-center rounded-xl border-2 border-blue-100 bg-white text-slate-400 peer-checked:bg-blue-600 peer-checked:text-white peer-checked:border-blue-600 peer-checked:shadow-lg transition-all font-bold text-sm flex items-center justify-center gap-2"><Zap className="w-4 h-4" /> Main</div></label><label className="flex-1 cursor-pointer group"><input type="radio" name="fuelStatus" value="Reserve" required className="peer sr-only" /><div className="p-3 text-center rounded-xl border-2 border-blue-100 bg-white text-slate-400 peer-checked:bg-orange-500 peer-checked:text-white peer-checked:border-orange-500 peer-checked:shadow-lg transition-all font-bold text-sm flex items-center justify-center gap-2"><Droplet className="w-4 h-4" /> Reserve</div></label></div></div>
                                 <div className="grid grid-cols-2 gap-4 pt-2 border-t border-blue-100">
-                                    <div>
-                                        <label className="text-xs text-blue-600 font-bold block mb-1.5">Price / L</label>
-                                        <input name="fuelPrice" type="number" step="0.01" required placeholder="e.g. 102" value={price} onChange={e => setPrice(e.target.value)} className="w-full p-3 bg-white rounded-xl border border-blue-200 outline-none font-bold text-slate-700" />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs text-blue-600 font-bold block mb-1.5">Liters</label>
-                                        <input name="fuelVolume" type="number" step="0.01" placeholder="Auto" value={vol} onChange={e => setVol(e.target.value)} className="w-full p-3 bg-blue-100/50 rounded-xl border border-blue-200 outline-none font-bold text-blue-800" />
-                                    </div>
+                                    <div><label className="text-xs text-blue-600 font-bold block mb-1.5">Price / L</label><input name="fuelPrice" type="number" step="0.01" required value={price} onChange={e => setPrice(e.target.value)} className="w-full p-3 bg-white rounded-xl border border-blue-200 outline-none font-bold text-slate-700" /></div>
+                                    <div><label className="text-xs text-blue-600 font-bold block mb-1.5">Liters</label><input name="fuelVolume" type="number" step="0.01" value={vol} onChange={e => setVol(e.target.value)} className="w-full p-3 bg-blue-100/50 rounded-xl border border-blue-200 outline-none font-bold text-blue-800" /></div>
                                 </div>
                             </div>
                         )}
@@ -133,7 +168,138 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({ onClose, onSave, edi
                             <div><label className="text-sm font-bold text-slate-700 ml-1">Note</label><input name="note" placeholder="Short note..." defaultValue={editItem?.note} className="w-full p-3.5 mt-1.5 bg-slate-50 rounded-2xl border border-slate-100 outline-none font-medium focus:border-slate-300 transition-colors" /></div>
                         </div>
                     </div>
-                    <button type="submit" className="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl hover:bg-slate-800 shadow-xl shadow-slate-200 active:scale-95 transition-all text-base">Save Expense</button>
+                    <button type="submit" className={`w-full text-white font-bold py-4 rounded-2xl shadow-xl active:scale-95 transition-all text-base ${txnType === 'income' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200' : 'bg-slate-900 hover:bg-slate-800 shadow-slate-200'}`}>{txnType === 'income' ? 'Save Income' : 'Save Expense'}</button>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+interface LoanModalProps extends BaseModalProps {
+    editItem: LoanLog | null;
+    pots: Record<string, number>;
+}
+
+export const LoanModal: React.FC<LoanModalProps> = ({ onClose, onSave, editItem, pots }) => {
+    const [loanType, setLoanType] = useState<'given' | 'taken'>(editItem?.loanType || 'taken');
+    const [source, setSource] = useState(editItem?.paymentSource || 'Salary');
+    const [amt, setAmt] = useState(editItem?.amount?.toString() || '');
+    const [error, setError] = useState<string | null>(null);
+
+    const handleFormSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        const amount = parseFloat(amt);
+        if (loanType === 'given') {
+            const currentBalance = pots[source] || 0;
+            if (amount > currentBalance) {
+                setError(`Insufficient funds in ${source}. Available: ₹${currentBalance}`);
+                return;
+            }
+        }
+        onSave(e);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 animate-in fade-in duration-200">
+            <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-8 ring-1 ring-white/50">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-xl font-bold text-slate-800 tracking-tight">{editItem ? 'Edit Loan' : 'Add Loan / Debt'}</h3>
+                    <button onClick={onClose} type="button" className="bg-slate-50 p-2 rounded-full hover:bg-slate-100 transition-colors"><X className="w-5 h-5 text-slate-500" /></button>
+                </div>
+                <form onSubmit={handleFormSubmit} className="space-y-5">
+                    <input type="hidden" name="paymentSource" value={source} />
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <label className="cursor-pointer group">
+                            <input type="radio" name="loanType" value="taken" checked={loanType === 'taken'} onChange={() => { setLoanType('taken'); setError(null); }} className="peer sr-only" />
+                            <div className="p-4 rounded-2xl border-2 border-slate-100 text-slate-400 peer-checked:bg-red-500 peer-checked:text-white peer-checked:border-red-500 peer-checked:shadow-lg peer-checked:shadow-red-200 transition-all flex flex-col items-center gap-2"><ArrowDownLeft className="w-6 h-6" /><span className="text-xs font-bold uppercase tracking-wider">I Borrowed</span></div>
+                        </label>
+                        <label className="cursor-pointer group">
+                            <input type="radio" name="loanType" value="given" checked={loanType === 'given'} onChange={() => { setLoanType('given'); setError(null); }} className="peer sr-only" />
+                            <div className="p-4 rounded-2xl border-2 border-slate-100 text-slate-400 peer-checked:bg-green-500 peer-checked:text-white peer-checked:border-green-500 peer-checked:shadow-lg peer-checked:shadow-green-200 transition-all flex flex-col items-center gap-2"><ArrowUpRight className="w-6 h-6" /><span className="text-xs font-bold uppercase tracking-wider">I Lent</span></div>
+                        </label>
+                    </div>
+
+                    <div className="space-y-4">
+                        <div><label className="text-sm font-bold text-slate-700 ml-1">Person Name</label><input name="person" type="text" required placeholder="e.g. Rahul" defaultValue={editItem?.person} className="w-full p-3.5 mt-1.5 bg-slate-50 rounded-2xl border border-slate-100 outline-none font-bold text-slate-800" /></div>
+                        <div><label className="text-sm font-bold text-slate-700 ml-1">Amount</label><input name="amount" type="number" required placeholder="0" value={amt} onChange={e => { setAmt(e.target.value); setError(null); }} className="w-full p-3.5 mt-1.5 bg-slate-50 rounded-2xl border border-slate-100 outline-none font-black text-xl text-slate-800" /></div>
+
+                        {loanType === 'given' && (
+                            <CustomDropdown
+                                label="Lend From (Source)"
+                                value={source}
+                                onChange={(val: string) => { setSource(val); setError(null); }}
+                                options={FUNDS_LIST}
+                                error={error}
+                            />
+                        )}
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div><label className="text-sm font-bold text-slate-700 ml-1">Date Taken</label><input name="date" type="date" required defaultValue={editItem?.date || new Date().toISOString().split('T')[0]} className="w-full p-3.5 mt-1.5 bg-slate-50 rounded-2xl border border-slate-100 outline-none font-medium text-slate-600" /></div>
+                            <div><label className="text-sm font-bold text-red-500 ml-1">Due Date</label><input name="dueDate" type="date" required defaultValue={editItem?.dueDate} className="w-full p-3.5 mt-1.5 bg-red-50 rounded-2xl border border-red-100 outline-none text-red-600 font-bold" /></div>
+                        </div>
+                    </div>
+                    <button type="submit" className="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl hover:bg-slate-800 shadow-xl shadow-slate-200 active:scale-95 transition-all text-base mt-2">Save Record</button>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+interface RepaymentModalProps extends BaseModalProps {
+    selectedLoan: LoanLog | null;
+    pots: Record<string, number>;
+}
+
+export const RepaymentModal: React.FC<RepaymentModalProps> = ({ onClose, onSave, selectedLoan, pots }) => {
+    const isPayingDebt = selectedLoan?.loanType === 'taken';
+    const [source, setSource] = useState('Salary');
+    const [amt, setAmt] = useState('');
+    const [error, setError] = useState<string | null>(null);
+
+    const handleFormSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        const amount = parseFloat(amt);
+        if (isPayingDebt) {
+            const currentBalance = pots[source] || 0;
+            if (amount > currentBalance) {
+                setError(`Insufficient funds in ${source}. Available: ₹${currentBalance}`);
+                return;
+            }
+        }
+        onSave(e);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 animate-in fade-in duration-200">
+            <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-8 ring-1 ring-white/50">
+                <div className="flex justify-between items-center mb-6">
+                    <div><h3 className="text-xl font-bold text-slate-800 tracking-tight">{isPayingDebt ? 'Repay Debt' : 'Receive Payment'}</h3><p className="text-xs font-medium text-slate-400">Loan with {selectedLoan?.person}</p></div>
+                    <button onClick={onClose} type="button" className="bg-slate-50 p-2 rounded-full hover:bg-slate-100 transition-colors"><X className="w-5 h-5 text-slate-500" /></button>
+                </div>
+                <form onSubmit={handleFormSubmit} className="space-y-6">
+                    <input type="hidden" name="paymentSource" value={source} />
+
+                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                        <div className="flex justify-between text-sm mb-2"><span className="text-slate-500 font-medium">Total Amount</span><span className="font-bold text-slate-800">₹{selectedLoan?.amount}</span></div>
+                        <div className="flex justify-between text-base"><span className="text-slate-600 font-bold">Remaining</span><span className="font-black text-red-500">₹{(selectedLoan?.amount || 0) - ((selectedLoan?.repayments || []).reduce((s, r) => s + r.amount, 0))}</span></div>
+                    </div>
+
+                    <div><label className="text-sm font-bold text-slate-700 ml-1">Amount</label><input name="amount" type="number" step="0.01" required placeholder="0" max={(selectedLoan?.amount || 0) - ((selectedLoan?.repayments || []).reduce((s, r) => s + r.amount, 0))} value={amt} onChange={e => { setAmt(e.target.value); setError(null); }} className="w-full p-4 mt-1.5 bg-slate-50 rounded-2xl border border-slate-100 outline-none font-black text-2xl text-slate-800" /></div>
+
+                    <CustomDropdown
+                        label={isPayingDebt ? "Pay From (Source)" : "Deposit To (Destination)"}
+                        value={source}
+                        onChange={(val: string) => { setSource(val); setError(null); }}
+                        options={FUNDS_LIST}
+                        error={error}
+                    />
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div><label className="text-sm font-bold text-slate-700 ml-1">Date</label><input name="date" type="date" required defaultValue={new Date().toISOString().split('T')[0]} className="w-full p-3.5 mt-1.5 bg-slate-50 rounded-2xl border border-slate-100 outline-none font-medium text-slate-600" /></div>
+                        <div><label className="text-sm font-bold text-slate-700 ml-1">Note</label><input name="note" placeholder="UPI..." className="w-full p-3.5 mt-1.5 bg-slate-50 rounded-2xl border border-slate-100 outline-none font-medium" /></div>
+                    </div>
+                    <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-4 rounded-2xl hover:bg-emerald-700 shadow-xl shadow-emerald-200 active:scale-95 transition-all text-base">Confirm</button>
                 </form>
             </div>
         </div>
@@ -159,7 +325,6 @@ export const MileageModal: React.FC<MileageModalProps> = ({ onClose, onSave, edi
                     {!editItem && <p className="text-xs text-slate-400 mt-2 font-medium flex items-center gap-1"><Check className="w-3 h-3" /> Last: {currentOdometer} km</p>}
                 </div>
 
-                {/* Standard Status Selection for Manual Updates */}
                 <div>
                     <label className="text-sm font-bold text-slate-700 ml-1">Current Fuel Status</label>
                     <div className="flex gap-3 mt-2">
@@ -181,74 +346,6 @@ export const MileageModal: React.FC<MileageModalProps> = ({ onClose, onSave, edi
     </div>
 );
 
-interface LoanModalProps extends BaseModalProps {
-    editItem: LoanLog | null;
-}
-
-export const LoanModal: React.FC<LoanModalProps> = ({ onClose, onSave, editItem }) => (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 animate-in fade-in duration-200">
-        <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-8 ring-1 ring-white/50">
-            <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold text-slate-800 tracking-tight">{editItem ? 'Edit Loan' : 'Add Loan / Debt'}</h3>
-                <button onClick={onClose} type="button" className="bg-slate-50 p-2 rounded-full hover:bg-slate-100 transition-colors"><X className="w-5 h-5 text-slate-500" /></button>
-            </div>
-            <form onSubmit={onSave} className="space-y-5">
-                <div className="grid grid-cols-2 gap-3">
-                    <label className="cursor-pointer group">
-                        <input type="radio" name="loanType" value="taken" defaultChecked={!editItem || editItem?.loanType === 'taken'} className="peer sr-only" />
-                        <div className="p-4 rounded-2xl border-2 border-slate-100 text-slate-400 peer-checked:bg-red-500 peer-checked:text-white peer-checked:border-red-500 peer-checked:shadow-lg peer-checked:shadow-red-200 transition-all flex flex-col items-center gap-2 group-hover:border-slate-200"><ArrowDownLeft className="w-6 h-6" /><span className="text-xs font-bold uppercase tracking-wider">I Borrowed</span></div>
-                    </label>
-                    <label className="cursor-pointer group">
-                        <input type="radio" name="loanType" value="given" defaultChecked={editItem?.loanType === 'given'} className="peer sr-only" />
-                        <div className="p-4 rounded-2xl border-2 border-slate-100 text-slate-400 peer-checked:bg-green-500 peer-checked:text-white peer-checked:border-green-500 peer-checked:shadow-lg peer-checked:shadow-green-200 transition-all flex flex-col items-center gap-2 group-hover:border-slate-200"><ArrowUpRight className="w-6 h-6" /><span className="text-xs font-bold uppercase tracking-wider">I Lent</span></div>
-                    </label>
-                </div>
-
-                <div className="space-y-4">
-                    <div><label className="text-sm font-bold text-slate-700 ml-1">Person Name</label><input name="person" type="text" required placeholder="e.g. Rahul" defaultValue={editItem?.person} className="w-full p-3.5 mt-1.5 bg-slate-50 rounded-2xl border border-slate-100 outline-none font-bold text-slate-800" /></div>
-                    <div><label className="text-sm font-bold text-slate-700 ml-1">Amount</label><input name="amount" type="number" required placeholder="0" defaultValue={editItem?.amount} className="w-full p-3.5 mt-1.5 bg-slate-50 rounded-2xl border border-slate-100 outline-none font-black text-xl text-slate-800" /></div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div><label className="text-sm font-bold text-slate-700 ml-1">Date Taken</label><input name="date" type="date" required defaultValue={editItem?.date || new Date().toISOString().split('T')[0]} className="w-full p-3.5 mt-1.5 bg-slate-50 rounded-2xl border border-slate-100 outline-none font-medium text-slate-600" /></div>
-                        <div><label className="text-sm font-bold text-red-500 ml-1">Due Date</label><input name="dueDate" type="date" required defaultValue={editItem?.dueDate} className="w-full p-3.5 mt-1.5 bg-red-50 rounded-2xl border border-red-100 outline-none text-red-600 font-bold" /></div>
-                    </div>
-                </div>
-
-                <button type="submit" className="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl hover:bg-slate-800 shadow-xl shadow-slate-200 active:scale-95 transition-all text-base mt-2">Save Record</button>
-            </form>
-        </div>
-    </div>
-);
-
-interface RepaymentModalProps extends BaseModalProps {
-    selectedLoan: LoanLog | null;
-}
-
-export const RepaymentModal: React.FC<RepaymentModalProps> = ({ onClose, onSave, selectedLoan }) => (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 animate-in fade-in duration-200">
-        <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-8 ring-1 ring-white/50">
-            <div className="flex justify-between items-center mb-6">
-                <div><h3 className="text-xl font-bold text-slate-800 tracking-tight">Record Payment</h3><p className="text-xs font-medium text-slate-400">Loan with {selectedLoan?.person}</p></div>
-                <button onClick={onClose} type="button" className="bg-slate-50 p-2 rounded-full hover:bg-slate-100 transition-colors"><X className="w-5 h-5 text-slate-500" /></button>
-            </div>
-            <form onSubmit={onSave} className="space-y-6">
-                <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                    <div className="flex justify-between text-sm mb-2"><span className="text-slate-500 font-medium">Total Loan Amount</span><span className="font-bold text-slate-800">₹{selectedLoan?.amount}</span></div>
-                    <div className="flex justify-between text-sm mb-2"><span className="text-slate-500 font-medium">Paid So Far</span><span className="font-bold text-emerald-600">₹{(selectedLoan?.repayments || []).reduce((s, r) => s + r.amount, 0)}</span></div>
-                    <div className="h-px bg-slate-200 my-3"></div>
-                    <div className="flex justify-between text-base"><span className="text-slate-600 font-bold">Remaining Balance</span><span className="font-black text-red-500">₹{(selectedLoan?.amount || 0) - ((selectedLoan?.repayments || []).reduce((s, r) => s + r.amount, 0))}</span></div>
-                </div>
-                <div><label className="text-sm font-bold text-slate-700 ml-1">Payment Amount</label><input name="amount" type="number" step="0.01" required placeholder="0" max={(selectedLoan?.amount || 0) - ((selectedLoan?.repayments || []).reduce((s, r) => s + r.amount, 0))} className="w-full p-4 mt-1.5 bg-slate-50 rounded-2xl border border-slate-100 outline-none font-black text-2xl text-slate-800" /></div>
-                <div className="grid grid-cols-2 gap-4">
-                    <div><label className="text-sm font-bold text-slate-700 ml-1">Date</label><input name="date" type="date" required defaultValue={new Date().toISOString().split('T')[0]} className="w-full p-3.5 mt-1.5 bg-slate-50 rounded-2xl border border-slate-100 outline-none font-medium text-slate-600" /></div>
-                    <div><label className="text-sm font-bold text-slate-700 ml-1">Method / Note</label><input name="note" placeholder="UPI..." className="w-full p-3.5 mt-1.5 bg-slate-50 rounded-2xl border border-slate-100 outline-none font-medium" /></div>
-                </div>
-                <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-4 rounded-2xl hover:bg-emerald-700 shadow-xl shadow-emerald-200 active:scale-95 transition-all text-base">Confirm Payment</button>
-            </form>
-        </div>
-    </div>
-);
-
-// --- SETTINGS MODAL (No Changes needed here, kept for completeness) ---
 interface SettingsModalProps extends BaseModalProps {
     settings: VehicleSettings | null;
     subDetails: SubscriptionDetails;
