@@ -532,7 +532,7 @@ export default function App() {
                             </div>
                             <div className="text-right">
                               <p className="font-black text-slate-800">{formatCurrency(item.amount)}</p>
-                              <div className="flex justify-end gap-3 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="flex justify-end gap-3 mt-1 ">
                                 <button onClick={() => { setEditItem(item); setModalType('expense'); }}><Edit2 className="w-3.5 h-3.5 text-blue-500 hover:scale-110 transition-transform" /></button>
                                 <button onClick={() => deleteItem('expenses', item.id)}><Trash2 className="w-3.5 h-3.5 text-red-500 hover:scale-110 transition-transform" /></button>
                               </div>
@@ -600,7 +600,7 @@ export default function App() {
                                 <p className="text-xs text-slate-400 font-medium">Odometer Update</p>
                               </div>
                             </div>
-                            <div className="flex items-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="flex items-center gap-3 ">
                               <button onClick={() => { setEditItem(m); setModalType('mileage'); }}><Edit2 className="w-4 h-4 text-slate-400 hover:text-blue-500" /></button>
                               <button onClick={() => deleteItem('mileage_logs', m.id)}><Trash2 className="w-4 h-4 text-slate-400 hover:text-red-500" /></button>
                             </div>
