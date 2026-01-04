@@ -17,8 +17,8 @@ import {
 import {
   Car, Fuel, Plus, Download, Trash2, Edit2, History, ShoppingBag,
   Home, Handshake, Gauge, LogOut, Lock, MessageCircle, ChevronDown,
-  Clock, Banknote, Settings, Briefcase,
-  PiggyBank,  Coins
+  Clock, Banknote, Settings, Briefcase, 
+  PiggyBank, Coins
 } from 'lucide-react';
 
 import type { MileageLog, ExpenseLog, LoanLog, TabView, DashboardMode, VehicleSettings, SubscriptionDetails } from './components/types';
@@ -389,7 +389,10 @@ export default function App() {
 
     // --- FUNDS POTS CALCULATION ---
     const pots: Record<string, number> = { Salary: 0, Savings: 0, Bonus: 0, Stocks: 0, Borrowed: 0, Cash: 0, Others: 0 };
-    const POT_NAMES = new Set(['Salary', 'Savings', 'Bonus', 'Stocks', 'Borrowed', 'Cash', 'Others']);
+
+    // Categories that are treated as SAVINGS/TRANSFERS (Money not spent, just moved)
+    // NOTE: 'Others' is deliberately excluded here so it counts as SPENDING.
+    const TRANSFER_CATEGORIES = new Set(['Salary', 'Savings', 'Bonus', 'Stocks', 'Borrowed', 'Cash']);
 
     // 1. Add Income to pots
     expenses.filter(e => e.txnType === 'income').forEach(e => {
@@ -412,8 +415,9 @@ export default function App() {
         pots[src] -= e.amount;
       }
 
-      // TRANSFER LOGIC: If category is a Pot, ADD it to that pot.
-      if (pots.hasOwnProperty(e.category)) {
+      // TRANSFER LOGIC: Only if category is a holding pot (like Savings), add it back.
+      // 'Others' is NOT in TRANSFER_CATEGORIES, so it won't be added back -> Counts as Spend.
+      if (TRANSFER_CATEGORIES.has(e.category) && pots.hasOwnProperty(e.category)) {
         pots[e.category] += e.amount;
       }
     });
@@ -442,11 +446,12 @@ export default function App() {
     });
 
     // --- MONTHLY SPEND & INCOME CALCULATION ---
-    // Fix: Exclude transfers (where category is a pot name) from "Monthly Spend"
     const monthlySpend = expenses
       .filter(e => e.date.startsWith(currentMonth) && e.txnType === 'expense')
       .reduce((acc, log) => {
-        if (POT_NAMES.has(log.category)) return acc; // Don't count transfers as spending
+        // If category is Savings/Stocks, it's a transfer, not spend. 
+        // If category is 'Others', it IS a spend.
+        if (TRANSFER_CATEGORIES.has(log.category)) return acc;
         return acc + log.amount;
       }, 0);
 
@@ -462,7 +467,7 @@ export default function App() {
 
     return {
       currentOdometer, totalDistance, vehicleExpenses, costPerKm, averageMileage,
-      monthlySpend, monthlyIncome, // Added monthlyIncome
+      monthlySpend, monthlyIncome,
       owedByMe, owedToMe,
       pots,
       needsMoreData: mileageLogs.length === 1
@@ -489,8 +494,9 @@ export default function App() {
 
   const loanStatsData = [{ name: 'Owed to Me', value: stats.owedToMe, fill: '#10B981' }, { name: 'I Owe', value: stats.owedByMe, fill: '#EF4444' }];
 
-  // Exclude transfers from pie chart to avoid confusion
-  const expenseOnly = expenses.filter(e => e.txnType === 'expense' && !['Salary', 'Savings', 'Bonus', 'Stocks', 'Borrowed', 'Cash', 'Others'].includes(e.category));
+  // Prepare data for the graph, excluding income for "Spending by Category"
+  // Also exclude Transfers from the Pie Chart
+  const expenseOnly = expenses.filter(e => e.txnType === 'expense' && !['Salary', 'Savings', 'Bonus', 'Stocks', 'Borrowed', 'Cash'].includes(e.category));
 
   return (
     <div className="min-h-screen bg-slate-50/80 pb-28 font-sans text-slate-800">
@@ -570,7 +576,7 @@ export default function App() {
                       <h2 className="text-4xl font-black tracking-tight">{formatCurrency(stats.monthlySpend)}</h2>
                     </div>
                     <div className="text-right">
-                      <p className="text-emerald-400 text-[10px] font-bold uppercase tracking-wide mb-1">Earned</p>
+                      <p className="text-emerald-400 text-[10px] font-bold uppercase tracking-wide mb-1">Total Earned</p>
                       <p className="font-bold text-white text-xl flex items-center justify-end gap-1">
                         <span className="text-emerald-500 text-sm">+</span>
                         {formatCurrency(stats.monthlyIncome)}
