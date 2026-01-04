@@ -17,8 +17,8 @@ import {
 import {
   Car, Fuel, Plus, Download, Trash2, Edit2, History, ShoppingBag,
   Home, Handshake, Gauge, LogOut, Lock, MessageCircle, ChevronDown,
-  Clock, Banknote, Settings, Briefcase, Plane, TrendingUp, Landmark,
-  PiggyBank, CreditCard, Coins, Gift
+  Clock, Banknote, Settings, Briefcase, 
+  PiggyBank
 } from 'lucide-react';
 
 import type { MileageLog, ExpenseLog, LoanLog, TabView, DashboardMode, VehicleSettings, SubscriptionDetails } from './components/types';
