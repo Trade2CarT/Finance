@@ -4,12 +4,11 @@ import {
     Fuel, X, Crown, Mail, MessageCircle, HelpCircle, Check, ShieldCheck,
     Gauge, Zap, Droplet, ArrowDownLeft, ArrowUpRight, Plane, Wallet,
     Briefcase, TrendingUp, DollarSign, Gift, ChevronDown, Landmark,
-    CreditCard, Coins, PiggyBank, AlertTriangle
+    CreditCard, Coins, PiggyBank, AlertTriangle, Wrench, BellRing
 } from 'lucide-react';
 import type { ExpenseLog, MileageLog, LoanLog, VehicleSettings, SubscriptionDetails } from './types';
 
 // --- SHARED CONSTANTS ---
-// Added 'Others' here so it appears in Income Sources and Payment Sources
 const FUNDS_LIST = [
     { name: 'Salary', icon: <Briefcase className="w-4 h-4 text-emerald-600" /> },
     { name: 'Savings', icon: <PiggyBank className="w-4 h-4 text-pink-500" /> },
@@ -17,7 +16,7 @@ const FUNDS_LIST = [
     { name: 'Stocks', icon: <TrendingUp className="w-4 h-4 text-blue-600" /> },
     { name: 'Cash', icon: <Coins className="w-4 h-4 text-orange-500" /> },
     { name: 'Borrowed', icon: <ArrowDownLeft className="w-4 h-4 text-red-500" /> },
-    { name: 'Others', icon: <HelpCircle className="w-4 h-4 text-slate-400" /> }, // Added Others Source
+    { name: 'Others', icon: <HelpCircle className="w-4 h-4 text-slate-400" /> },
 ];
 
 interface BaseModalProps {
@@ -110,7 +109,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({ onClose, onSave, edi
             { name: 'Bills', icon: <DollarSign className="w-4 h-4 text-gray-500" /> },
             { name: 'Shopping', icon: <CreditCard className="w-4 h-4 text-pink-500" /> },
             { name: 'Savings', icon: <Landmark className="w-4 h-4 text-emerald-500" /> },
-            { name: 'Others', icon: <HelpCircle className="w-4 h-4 text-slate-400" /> }, // Added Others Category
+            { name: 'Others', icon: <HelpCircle className="w-4 h-4 text-slate-400" /> },
         ],
         income: FUNDS_LIST.filter(f => f.name !== 'Borrowed')
     };
@@ -455,6 +454,111 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onSave, s
                         </div>
                     </div>
                     <button type="submit" className="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl hover:bg-slate-800 shadow-xl shadow-slate-200 active:scale-95 transition-all text-base tracking-wide">Save & Close</button>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+interface ServiceModalProps extends BaseModalProps {
+    currentOdometer: number;
+}
+
+export const ServiceModal: React.FC<ServiceModalProps> = ({ onClose, onSave, currentOdometer }) => {
+    const [task, setTask] = useState('Engine Oil');
+    const [cost, setCost] = useState('');
+    const [currentOdo, setCurrentOdo] = useState(currentOdometer?.toString() || '');
+    const [intervalKm, setIntervalKm] = useState('3000');
+    const [intervalDays, setIntervalDays] = useState('90');
+
+    // Preset maintenance schedules
+    const SERVICE_TASKS = [
+        { name: 'Engine Oil', km: 3000, days: 90 },
+        { name: 'Chain Lube', km: 500, days: 15 },
+        { name: 'Air Filter', km: 5000, days: 180 },
+        { name: 'Spark Plug', km: 12000, days: 365 },
+        { name: 'Brake Pads', km: 5000, days: 180 },
+        { name: 'General Service', km: 3000, days: 120 },
+        { name: 'Coolant', km: 10000, days: 365 },
+    ];
+
+    const handleTaskChange = (newTask: string) => {
+        setTask(newTask);
+        const preset = SERVICE_TASKS.find(t => t.name === newTask);
+        if (preset) {
+            setIntervalKm(preset.km.toString());
+            setIntervalDays(preset.days.toString());
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 animate-in fade-in duration-200">
+            <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-8 ring-1 ring-white/50 max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-xl font-bold text-slate-800 tracking-tight">Record Maintenance</h3>
+                    <button onClick={onClose} type="button" className="bg-slate-50 p-2 rounded-full hover:bg-slate-100 transition-colors"><X className="w-5 h-5 text-slate-500" /></button>
+                </div>
+
+                <form onSubmit={onSave} className="space-y-5">
+                    {/* Hidden Inputs for logic */}
+                    <input type="hidden" name="taskName" value={task} />
+
+                    {/* Task Selector */}
+                    <div>
+                        <label className="text-sm font-bold text-slate-700 ml-1 mb-2 block">Service Task</label>
+                        <div className="grid grid-cols-2 gap-2">
+                            {SERVICE_TASKS.map(t => (
+                                <button
+                                    key={t.name}
+                                    type="button"
+                                    onClick={() => handleTaskChange(t.name)}
+                                    className={`p-3 rounded-xl text-xs font-bold border transition-all ${task === t.name ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-slate-50 text-slate-600 border-slate-100 hover:bg-slate-100'}`}
+                                >
+                                    {t.name}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-4">
+                        <div className="flex items-center gap-2 text-blue-600 font-bold text-xs uppercase tracking-wider border-b border-slate-200 pb-2 mb-2">
+                            <Wrench className="w-3 h-3" /> Service Details
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 block mb-1">Odometer Now</label>
+                                <input name="odometer" type="number" required value={currentOdo} onChange={e => setCurrentOdo(e.target.value)} className="w-full p-2 bg-white rounded-lg border border-slate-200 font-bold text-slate-800 outline-none focus:border-blue-500" />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 block mb-1">Cost (₹)</label>
+                                <input name="cost" type="number" placeholder="0" value={cost} onChange={e => setCost(e.target.value)} className="w-full p-2 bg-white rounded-lg border border-slate-200 font-bold text-slate-800 outline-none focus:border-blue-500" />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="text-xs font-bold text-slate-500 block mb-1">Date</label>
+                            <input name="date" type="date" required defaultValue={new Date().toISOString().split('T')[0]} className="w-full p-2 bg-white rounded-lg border border-slate-200 font-bold text-slate-800 outline-none" />
+                        </div>
+                    </div>
+
+                    <div className="bg-orange-50 p-4 rounded-2xl border border-orange-100 space-y-4">
+                        <div className="flex items-center gap-2 text-orange-600 font-bold text-xs uppercase tracking-wider border-b border-orange-200 pb-2 mb-2">
+                            <BellRing className="w-3 h-3" /> Set Next Reminder
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 block mb-1">Repeat after (km)</label>
+                                <input name="intervalKm" type="number" value={intervalKm} onChange={e => setIntervalKm(e.target.value)} className="w-full p-2 bg-white rounded-lg border border-orange-200 font-bold text-orange-800 outline-none focus:border-orange-500" />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 block mb-1">Repeat after (Days)</label>
+                                <input name="intervalDays" type="number" value={intervalDays} onChange={e => setIntervalDays(e.target.value)} className="w-full p-2 bg-white rounded-lg border border-orange-200 font-bold text-orange-800 outline-none focus:border-orange-500" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" className="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl hover:bg-slate-800 shadow-xl shadow-slate-200 active:scale-95 transition-all text-base">Save Service Record</button>
                 </form>
             </div>
         </div>

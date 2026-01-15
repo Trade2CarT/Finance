@@ -17,13 +17,13 @@ import {
 import {
   Car, Fuel, Plus, Download, Trash2, Edit2, History, ShoppingBag,
   Home, Handshake, Gauge, LogOut, Lock, MessageCircle, ChevronDown,
-  Clock, Banknote, Settings, Briefcase, 
-  PiggyBank, Coins
+  Clock, Banknote, Settings, Briefcase,
+  PiggyBank, Coins, Wrench, AlertCircle, CheckCircle2
 } from 'lucide-react';
 
-import type { MileageLog, ExpenseLog, LoanLog, TabView, DashboardMode, VehicleSettings, SubscriptionDetails } from './components/types';
+import type { MileageLog, ExpenseLog, LoanLog, TabView, DashboardMode, VehicleSettings, SubscriptionDetails, ServiceLog } from './components/types';
 import { formatCurrency, formatDate } from './components/utils';
-import { ExpenseModal, MileageModal, LoanModal, RepaymentModal, SettingsModal } from './components/Modals';
+import { ExpenseModal, MileageModal, LoanModal, RepaymentModal, SettingsModal, ServiceModal } from './components/Modals';
 import Auth from './components/Auth';
 import { auth, db, appId } from './components/firebaseConfig';
 
@@ -140,6 +140,7 @@ export default function App() {
   const [mileageLogs, setMileageLogs] = useState<MileageLog[]>([]);
   const [expenses, setExpenses] = useState<ExpenseLog[]>([]);
   const [loans, setLoans] = useState<LoanLog[]>([]);
+  const [serviceLogs, setServiceLogs] = useState<ServiceLog[]>([]);
 
   // Settings State
   const [vehicleSettings, setVehicleSettings] = useState<VehicleSettings | null>(null);
@@ -149,7 +150,7 @@ export default function App() {
 
   // UI State
   const [isFabOpen, setIsFabOpen] = useState(false);
-  const [modalType, setModalType] = useState<'mileage' | 'expense' | 'loan' | 'repayment' | 'settings' | null>(null);
+  const [modalType, setModalType] = useState<'mileage' | 'expense' | 'loan' | 'repayment' | 'settings' | 'service' | null>(null);
   const [editItem, setEditItem] = useState<any>(null);
   const [selectedLoan, setSelectedLoan] = useState<LoanLog | null>(null);
 
@@ -168,6 +169,7 @@ export default function App() {
       setMileageLogs([]);
       setExpenses([]);
       setLoans([]);
+      setServiceLogs([]);
       setVehicleSettings(null);
       return;
     }
@@ -245,11 +247,15 @@ export default function App() {
       }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     });
 
-    return () => { unsubSub(); unsubMileage(); unsubExpenses(); unsubLoans(); };
+    const unsubService = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'service_logs'), (snap) => {
+      setServiceLogs(snap.docs.map(d => ({ id: d.id, type: 'service', ...d.data() } as ServiceLog)).sort((a, b) => b.odometer - a.odometer));
+    });
+
+    return () => { unsubSub(); unsubMileage(); unsubExpenses(); unsubLoans(); unsubService(); };
   }, [user]);
 
   // --- FIXED HANDLE SAVE FUNCTION ---
-  const handleSave = async (e: React.FormEvent, type: 'mileage' | 'expense' | 'loan' | 'repayment' | 'settings') => {
+  const handleSave = async (e: React.FormEvent, type: 'mileage' | 'expense' | 'loan' | 'repayment' | 'settings' | 'service') => {
     e.preventDefault();
     if (!user) return;
     const form = e.target as HTMLFormElement;
@@ -263,6 +269,35 @@ export default function App() {
       const tankCapacity = parseFloat(getVal('tankCapacity')) || 0;
       const reserveCapacity = parseFloat(getVal('reserveCapacity')) || 0;
       await setDoc(doc(db, 'artifacts', appId, 'users', user.uid), { settings: { tankCapacity, reserveCapacity } }, { merge: true });
+    }
+
+    else if (type === 'service') {
+      const taskName = getVal('taskName');
+      const odometer = parseFloat(getVal('odometer'));
+      const cost = parseFloat(getVal('cost')) || 0;
+      const date = getVal('date');
+      const intervalKm = parseFloat(getVal('intervalKm'));
+      const intervalDays = parseFloat(getVal('intervalDays'));
+
+      const nextDueOdometer = odometer + intervalKm;
+      const nextDueDateObj = new Date(date);
+      nextDueDateObj.setDate(nextDueDateObj.getDate() + intervalDays);
+      const nextDueDate = nextDueDateObj.toISOString().split('T')[0];
+
+      const data = {
+        taskName, date, odometer, cost,
+        nextDueOdometer, nextDueDate,
+        timestamp: Date.now()
+      };
+
+      await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'service_logs'), data);
+
+      // Automatically add expense log if cost > 0
+      if (cost > 0) {
+        await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses'), {
+          date, category: 'Service', amount: cost, note: `${taskName} Service`, txnType: 'expense', paymentSource: 'Cash', timestamp: Date.now()
+        });
+      }
     }
 
     else if (type === 'mileage') {
@@ -474,6 +509,25 @@ export default function App() {
     };
   }, [mileageLogs, expenses, loans]);
 
+  // NEW: Vehicle Health Calc
+  const vehicleHealth = useMemo(() => {
+    const tasks = ['Engine Oil', 'Chain Lube', 'Air Filter', 'Spark Plug', 'Brake Pads'];
+    const status = tasks.map(task => {
+      const lastLog = serviceLogs.find(l => l.taskName === task);
+      if (!lastLog) return { task, status: 'unknown', dueInKm: 0, dueInDays: 0 };
+
+      const dueInKm = lastLog.nextDueOdometer - stats.currentOdometer;
+      const dueInDays = Math.ceil((new Date(lastLog.nextDueDate || '').getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+
+      let health = 'good';
+      if (dueInKm < 0 || dueInDays < 0) health = 'overdue';
+      else if (dueInKm < 500) health = 'soon';
+
+      return { task, status: health, dueInKm, dueInDays, lastOdo: lastLog.odometer };
+    });
+    return status.sort((a, b) => a.dueInKm - b.dueInKm);
+  }, [serviceLogs, stats.currentOdometer]);
+
   const combinedHistory = useMemo(() => {
     return [...expenses, ...mileageLogs, ...loans]
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || b.timestamp - a.timestamp);
@@ -493,9 +547,6 @@ export default function App() {
   if (!hasAccess) return <LockedScreen onLogout={() => signOut(auth)} />;
 
   const loanStatsData = [{ name: 'Owed to Me', value: stats.owedToMe, fill: '#10B981' }, { name: 'I Owe', value: stats.owedByMe, fill: '#EF4444' }];
-
-  // Prepare data for the graph, excluding income for "Spending by Category"
-  // Also exclude Transfers from the Pie Chart
   const expenseOnly = expenses.filter(e => e.txnType === 'expense' && !['Salary', 'Savings', 'Bonus', 'Stocks', 'Borrowed', 'Cash'].includes(e.category));
 
   return (
@@ -616,7 +667,7 @@ export default function App() {
                 </div>
               </>
             ) : (
-              // Vehicle View (Unchanged)
+              // Vehicle View
               <>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
@@ -632,7 +683,8 @@ export default function App() {
                     <p className="text-[10px] text-slate-400 font-medium">km/L</p>
                   </div>
                 </div>
-                <div className="bg-blue-600 rounded-3xl p-7 text-white shadow-xl shadow-blue-200 relative overflow-hidden mt-6">
+
+                <div className="bg-blue-600 rounded-3xl p-7 text-white shadow-xl shadow-blue-200 relative overflow-hidden mt-6 mb-6">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl pointer-events-none -mr-10 -mt-10"></div>
                   <div className="flex justify-between items-start relative z-10">
                     <div><p className="text-blue-200 text-xs font-bold uppercase tracking-widest">Vehicle Spending</p><h2 className="text-4xl font-black mt-2">{formatCurrency(stats.vehicleExpenses)}</h2></div>
@@ -641,6 +693,48 @@ export default function App() {
                   <div className="mt-6 flex gap-6 text-xs text-blue-100 border-t border-blue-500/50 pt-5 relative z-10">
                     <div><span className="opacity-70 font-medium block mb-1">Running Cost</span><p className="font-bold text-lg text-white">{stats.costPerKm === '---' ? '---' : `₹${stats.costPerKm}`}<span className="text-xs font-normal opacity-70">/km</span></p></div>
                     <div><span className="opacity-70 font-medium block mb-1">Total Driven</span><p className="font-bold text-lg text-white">{stats.totalDistance.toLocaleString()} <span className="text-xs font-normal opacity-70">km</span></p></div>
+                  </div>
+                </div>
+
+                {/* NEW: Vehicle Health Card */}
+                <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm">
+                  <div className="flex justify-between items-center mb-4">
+                    <div>
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Vehicle Health</p>
+                      <h3 className="font-black text-slate-800 text-lg">Maintenance</h3>
+                    </div>
+                    <button onClick={() => setModalType('service')} className="bg-slate-50 text-slate-600 p-2 rounded-xl hover:bg-slate-100 transition-colors">
+                      <Plus className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {vehicleHealth.map((item) => (
+                      <div key={item.task} className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-full ${item.status === 'overdue' ? 'bg-red-100 text-red-600' : item.status === 'soon' ? 'bg-orange-100 text-orange-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                            {item.status === 'overdue' ? <AlertCircle className="w-4 h-4" /> :
+                              item.status === 'soon' ? <Wrench className="w-4 h-4" /> :
+                                <CheckCircle2 className="w-4 h-4" />}
+                          </div>
+                          <div>
+                            <p className="font-bold text-sm text-slate-700">{item.task}</p>
+                            <p className="text-[10px] font-bold text-slate-400">
+                              {item.status === 'unknown' ? 'No records' :
+                                item.status === 'overdue' ? `Overdue by ${Math.abs(item.dueInKm)} km` :
+                                  `${item.dueInKm} km left`}
+                            </p>
+                          </div>
+                        </div>
+                        {item.status !== 'unknown' && (
+                          <div className="text-right">
+                            <div className={`text-xs font-black px-2 py-1 rounded-lg ${item.status === 'overdue' ? 'bg-red-500 text-white' : item.status === 'soon' ? 'bg-orange-500 text-white' : 'bg-white text-slate-300'}`}>
+                              {item.dueInKm < 1000 ? `${item.dueInKm} km` : `${(item.dueInKm / 1000).toFixed(1)}k`}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               </>
@@ -820,6 +914,7 @@ export default function App() {
       {modalType === 'loan' && <LoanModal onClose={() => setModalType(null)} onSave={(e) => handleSave(e, 'loan')} editItem={editItem} pots={stats.pots} />}
       {modalType === 'repayment' && <RepaymentModal onClose={() => setModalType(null)} onSave={(e) => handleSave(e, 'repayment')} selectedLoan={selectedLoan} pots={stats.pots} />}
       {modalType === 'settings' && <SettingsModal onClose={() => setModalType(null)} onSave={(e) => handleSave(e, 'settings')} settings={vehicleSettings} subDetails={subDetails} />}
+      {modalType === 'service' && <ServiceModal onClose={() => setModalType(null)} onSave={(e) => handleSave(e, 'service')} currentOdometer={stats.currentOdometer} />}
     </div>
   );
 }

@@ -17,7 +17,7 @@ export interface ExpenseLog {
     date: string;
     amount: number;
     category: string;
-    paymentSource?: string; // Where money came from (Salary, Savings...)
+    paymentSource?: string;
     note: string;
     fuelPrice?: number;
     fuelVolume?: number;
@@ -29,7 +29,7 @@ export interface Repayment {
     amount: number;
     date: string;
     note?: string;
-    paymentSource: string; // Where did I pay from? OR Where did I deposit this?
+    paymentSource: string;
 }
 
 export interface LoanLog {
@@ -41,8 +41,20 @@ export interface LoanLog {
     date: string;
     dueDate: string;
     note: string;
-    paymentSource?: string; // If 'given', where did I take money from?
+    paymentSource?: string;
     repayments: Repayment[];
+    timestamp: number;
+}
+
+export interface ServiceLog {
+    id: string;
+    type: 'service';
+    taskName: string;
+    date: string;
+    odometer: number;
+    nextDueOdometer: number;
+    nextDueDate?: string;
+    cost: number;
     timestamp: number;
 }
 
